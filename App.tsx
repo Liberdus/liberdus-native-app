@@ -106,7 +106,7 @@ const App: React.FC = () => {
   const openBrowser = async () => {
     try {
       await Linking.openURL(
-        `${DEV_NETWORK_URL}?device_id=${deviceToken}&push_token=${expoPushToken}`
+        `${DEV_NETWORK_URL}?device_token=${deviceToken}&push_token=${expoPushToken}`
       );
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
