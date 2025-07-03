@@ -82,10 +82,14 @@ const App: React.FC = () => {
     }
   };
 
-  const subscribeToServer = async (deviceToken: string, expoPushToken: string) => {
+  const subscribeToServer = async (
+    deviceToken: string,
+    expoPushToken: string
+  ) => {
     try {
       const payload = {
         deviceToken,
+        expoPushToken,
         addresses: [
           "2c9485418b492fb5be57bec4dc6a5eedf082d257000000000000000000000000", // jrp
         ],
@@ -101,15 +105,17 @@ const App: React.FC = () => {
 
   const openBrowser = async () => {
     try {
-      await Linking.openURL(`${DEV_NETWORK_URL}?device_id=${deviceToken}&push_token=${expoPushToken}`);
+      await Linking.openURL(
+        `${DEV_NETWORK_URL}?device_id=${deviceToken}&push_token=${expoPushToken}`
+      );
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
       Alert.alert(
         "Error",
-        `An error occurred while trying to open the browser: ${reason}`,
-
+        `An error occurred while trying to open the browser: ${reason}`
       );
-      console.error("Error opening URL:", error);    }
+      console.error("Error opening URL:", error);
+    }
   };
 
   return (
@@ -140,7 +146,6 @@ const App: React.FC = () => {
               )
             : "Unavailable"}
         </Text>
-
       </View>
     </View>
   );
