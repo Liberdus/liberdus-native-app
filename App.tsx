@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
   StyleSheet,
   Text,
@@ -8,25 +8,100 @@ import {
   Platform,
 } from "react-native";
 import * as Linking from "expo-linking";
+import * as Notifications from "expo-notifications";
+import * as Device from "expo-device";
+import axios from "axios";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Crypto from "expo-crypto";
+
+const DEV_NETWORK_URL = "https://liberdus.com/dev";
+const SUBSCRIPTION_API = "http://192.168.1.91:3001/subscribe";
+
+const DEVICE_TOKEN_KEY = "device_token";
+
+export async function getOrCreateDeviceToken(): Promise<string> {
+  const existing = await AsyncStorage.getItem(DEVICE_TOKEN_KEY);
+  if (existing) return existing;
+
+  const bytes = await Crypto.getRandomBytesAsync(16);
+  const uuid = Array.from(bytes)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+
+  await AsyncStorage.setItem(DEVICE_TOKEN_KEY, uuid);
+  return uuid;
+}
 
 const App: React.FC = () => {
-  // Replace with your dev network URL
-  const DEV_NETWORK_URL: string = "https://liberdus.com/dev/";
+  const [deviceToken, setDeviceToken] = useState<string | null>(null);
+  const [expoPushToken, setExpoPushToken] = useState<string | null>(null);
 
-  const openBrowser = async (): Promise<void> => {
+  useEffect(() => {
+    (async () => {
+      const token = await getOrCreateDeviceToken();
+      console.log("📱 Device Token:", token);
+      setDeviceToken(token);
+
+      await registerForPushNotificationsAsync(token);
+    })();
+  }, []);
+
+  const registerForPushNotificationsAsync = async (deviceToken: string) => {
     try {
-      // `Linking.canOpenURL` sometimes fails on some Android devices, so updated to use `Linking.openURL` directly
-      // const supported = await Linking.canOpenURL(DEV_NETWORK_URL);
+      if (!Device.isDevice) {
+        Alert.alert("Error", "Must use physical device for Push Notifications");
+        return;
+      }
 
-      // if (supported) {
-      //   await Linking.openURL(DEV_NETWORK_URL);
-      // } else {
-      //   Alert.alert(
-      //     "Error",
-      //     "Unable to open the URL. Please check if you have a browser installed."
-      //   );
-      // }
-      await Linking.openURL(DEV_NETWORK_URL);
+      const { status: existingStatus } =
+        await Notifications.getPermissionsAsync();
+      let finalStatus = existingStatus;
+
+      if (existingStatus !== "granted") {
+        const { status } = await Notifications.requestPermissionsAsync();
+        finalStatus = status;
+      }
+
+      if (finalStatus !== "granted") {
+        Alert.alert("Permission denied", "Failed to get push token");
+        return;
+      }
+
+      console.log("📱 Permission status:", finalStatus);
+
+      const tokenData = await Notifications.getExpoPushTokenAsync();
+      console.log("📱 Expo Push Token Data:", tokenData);
+      const token = tokenData.data;
+      setExpoPushToken(token);
+      console.log("📱 Expo Push Token:", token);
+
+      // subscribeToServer(deviceToken, token);
+    } catch (error) {
+      console.error("❌ Failed to subscribe:", error);
+      Alert.alert("Error", "Failed to subscribe to notification server");
+    }
+  };
+
+  const subscribeToServer = async (deviceToken: string, expoPushToken: string) => {
+    try {
+      const payload = {
+        deviceToken,
+        addresses: [
+          "2c9485418b492fb5be57bec4dc6a5eedf082d257000000000000000000000000", // jrp
+        ],
+      };
+
+      const response = await axios.post(SUBSCRIPTION_API, payload);
+      console.log("✅ Subscribed to notification server:", response.data);
+    } catch (error) {
+      console.error("❌ Failed to subscribe:", error);
+      Alert.alert("Error", "Failed to subscribe to notification server");
+    }
+  };
+
+  const openBrowser = async () => {
+    try {
+      await Linking.openURL(`${DEV_NETWORK_URL}?device_id=${deviceToken}&push_token=${expoPushToken}`);
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
       Alert.alert(
@@ -34,18 +109,15 @@ const App: React.FC = () => {
         `An error occurred while trying to open the browser: ${reason}`,
 
       );
-      console.error("Error opening URL:", error);
-    }
+      console.error("Error opening URL:", error);    }
   };
 
   return (
     <View style={styles.container}>
       <Text style={styles.title}>🚀 Liberdus App Launcher</Text>
-
       <Text style={styles.subtitle}>
         Tap the button below to open the Liberdus app in your default browser
       </Text>
-
       <TouchableOpacity style={styles.button} onPress={openBrowser}>
         <Text style={styles.buttonText}>Launch Dev App</Text>
       </TouchableOpacity>
@@ -55,6 +127,20 @@ const App: React.FC = () => {
           📱 Platform: {Platform.OS === "ios" ? "iOS" : "Android"}
         </Text>
         <Text style={styles.infoText}>🔗 URL: {DEV_NETWORK_URL}</Text>
+        <Text style={styles.infoText}>✅ Device token: </Text>
+        <Text style={styles.noteText}>
+          {deviceToken ? deviceToken : "Unavailable"}
+        </Text>
+        <Text style={styles.infoText}>✅ Push token: </Text>
+        <Text style={styles.noteText}>
+          {expoPushToken
+            ? expoPushToken.substring(
+                expoPushToken.indexOf("[") + 1,
+                expoPushToken.indexOf("]")
+              )
+            : "Unavailable"}
+        </Text>
+
       </View>
     </View>
   );
@@ -90,10 +176,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     elevation: 3,
     shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 4,
     minWidth: 200,
@@ -111,10 +194,7 @@ const styles = StyleSheet.create({
     padding: 20,
     borderRadius: 12,
     shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 1,
-    },
+    shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 2,
     elevation: 2,
@@ -122,7 +202,7 @@ const styles = StyleSheet.create({
   infoText: {
     fontSize: 14,
     color: "#333",
-    marginBottom: 8,
+    marginTop: 8,
     textAlign: "center",
   },
   noteText: {
@@ -130,7 +210,7 @@ const styles = StyleSheet.create({
     color: "#666",
     fontStyle: "italic",
     textAlign: "center",
-    marginTop: 10,
+    marginTop: 4,
     maxWidth: 250,
   },
 });
