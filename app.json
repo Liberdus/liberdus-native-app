@@ -29,8 +29,9 @@
       "package": "com.yourcompany.liberdus",
       "permissions": [
         "android.permission.INTERNET",
-        "android.permission.INTERNET"
-      ]
+        "android.permission.VIBRATE"
+      ],
+      "googleServicesFile": "./google-services.json"
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -46,6 +47,10 @@
     },
     "updates": {
       "url": "https://u.expo.dev/b69683fc-e52c-4b79-a328-28d96aabe023"
-    }
+    },
+    "plugins": [
+      "expo-notifications",
+      "expo-updates"
+    ]
   }
 }

@@ -15,9 +15,46 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Crypto from "expo-crypto";
 
 const DEV_NETWORK_URL = "https://liberdus.com/dev";
-const SUBSCRIPTION_API = "http://192.168.1.91:3001/subscribe";
+const SUBSCRIPTION_API = "https://dev.liberdus.com:3030/notifier/subscribe";
 
 const DEVICE_TOKEN_KEY = "device_token";
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldPlaySound: true,
+    shouldSetBadge: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
+  }),
+});
+
+async function registerNotificationChannels() {
+  if (Platform.OS !== "android") return;
+
+  await Notifications.setNotificationChannelAsync("default", {
+    name: "Default",
+    importance: Notifications.AndroidImportance.HIGH,
+    sound: "default",
+    vibrationPattern: [0, 250, 250, 250],
+    lightColor: "#FF231F7C",
+  });
+
+  await Notifications.setNotificationChannelAsync("alerts", {
+    name: "Critical Alerts",
+    importance: Notifications.AndroidImportance.MAX,
+    sound: "default",
+    vibrationPattern: [0, 500, 500, 500],
+    lightColor: "#FF0000",
+  });
+
+  await Notifications.setNotificationChannelAsync("background", {
+    name: "Background Sync",
+    importance: Notifications.AndroidImportance.MIN,
+    sound: "",
+    vibrationPattern: [],
+    lightColor: "#999999",
+  });
+}
 
 export async function getOrCreateDeviceToken(): Promise<string> {
   const existing = await AsyncStorage.getItem(DEVICE_TOKEN_KEY);
@@ -35,14 +72,34 @@ export async function getOrCreateDeviceToken(): Promise<string> {
 const App: React.FC = () => {
   const [deviceToken, setDeviceToken] = useState<string | null>(null);
   const [expoPushToken, setExpoPushToken] = useState<string | null>(null);
+  const [notification, setNotification] = useState<
+    Notifications.Notification | undefined
+  >(undefined);
 
   useEffect(() => {
     (async () => {
+      await registerNotificationChannels();
       const token = await getOrCreateDeviceToken();
       console.log("📱 Device Token:", token);
       setDeviceToken(token);
 
       await registerForPushNotificationsAsync(token);
+
+      const notificationListener =
+        Notifications.addNotificationReceivedListener((notification) => {
+          console.log("📱 Notification Received:", notification);
+          setNotification(notification);
+        });
+
+      const responseListener =
+        Notifications.addNotificationResponseReceivedListener((response) => {
+          console.log("📱 Notification Response Received:", response);
+        });
+
+      return () => {
+        notificationListener.remove();
+        responseListener.remove();
+      };
     })();
   }, []);
 
@@ -77,8 +134,11 @@ const App: React.FC = () => {
 
       // subscribeToServer(deviceToken, token);
     } catch (error) {
-      console.error("❌ Failed to subscribe:", error);
-      Alert.alert("Error", "Failed to subscribe to notification server");
+      console.error(
+        "❌ Failed to configure push notifications:",
+        error instanceof Error ? error.message : String(error)
+      );
+      Alert.alert("Error", "Failed to configure push notifications");
     }
   };
 
@@ -98,7 +158,10 @@ const App: React.FC = () => {
       const response = await axios.post(SUBSCRIPTION_API, payload);
       console.log("✅ Subscribed to notification server:", response.data);
     } catch (error) {
-      console.error("❌ Failed to subscribe:", error);
+      console.error(
+        "❌ Failed to subscribe:",
+        error instanceof Error ? error.message : String(error)
+      );
       Alert.alert("Error", "Failed to subscribe to notification server");
     }
   };
@@ -110,11 +173,11 @@ const App: React.FC = () => {
       );
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
+      console.error("Error opening URL:", reason);
       Alert.alert(
         "Error",
         `An error occurred while trying to open the browser: ${reason}`
       );
-      console.error("Error opening URL:", error);
     }
   };
 
@@ -125,7 +188,7 @@ const App: React.FC = () => {
         Tap the button below to open the Liberdus app in your default browser
       </Text>
       <TouchableOpacity style={styles.button} onPress={openBrowser}>
-        <Text style={styles.buttonText}>Launch Dev App</Text>
+        <Text style={styles.buttonText}>Launch App</Text>
       </TouchableOpacity>
 
       <View style={styles.infoContainer}>
@@ -147,6 +210,23 @@ const App: React.FC = () => {
             : "Unavailable"}
         </Text>
       </View>
+      {notification && (
+        <View style={styles.notificationContainer}>
+          <Text style={styles.notificationTitle}>📩 Notification:</Text>
+          <Text style={styles.notificationText}>
+            {notification.request.content.title}
+          </Text>
+          <Text style={styles.notificationText}>
+            {notification.request.content.body}
+          </Text>
+          <Text style={styles.notificationText}>📌 Data:</Text>
+          {Object.keys(notification.request.content.data).map((key, index) => (
+            <Text key={index} style={styles.notificationText}>
+              {`${key}: ${notification.request.content.data[key]}`}
+            </Text>
+          ))}
+        </View>
+      )}
     </View>
   );
 };
@@ -203,6 +283,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 2,
     elevation: 2,
+    minWidth: 300,
   },
   infoText: {
     fontSize: 14,
@@ -215,6 +296,33 @@ const styles = StyleSheet.create({
     color: "#666",
     fontStyle: "italic",
     textAlign: "center",
+    marginTop: 4,
+    maxWidth: 250,
+  },
+  notificationContainer: {
+    marginTop: 20,
+    alignItems: "center",
+    backgroundColor: "white",
+    padding: 20,
+    borderRadius: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+    minWidth: 300,
+  },
+  notificationTitle: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#333",
+    textAlign: "center",
+  },
+  notificationText: {
+    fontSize: 12,
+    color: "#666",
+    textAlign: "center",
+    fontStyle: "italic",
     marginTop: 4,
     maxWidth: 250,
   },
