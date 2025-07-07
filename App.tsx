@@ -152,6 +152,7 @@ const App: React.FC = () => {
         expoPushToken,
         addresses: [
           "2c9485418b492fb5be57bec4dc6a5eedf082d257000000000000000000000000", // jrp
+          "fa7e9c5fbd02d485f3b527908d6f400fe63c2fbc000000000000000000000000", // jrl
         ],
       };
 
@@ -160,7 +161,11 @@ const App: React.FC = () => {
     } catch (error) {
       console.error(
         "❌ Failed to subscribe:",
-        error instanceof Error ? error.message : String(error)
+        axios.isAxiosError(error)
+          ? error.response?.data
+          : error instanceof Error
+          ? error.message
+          : String(error)
       );
       Alert.alert("Error", "Failed to subscribe to notification server");
     }
