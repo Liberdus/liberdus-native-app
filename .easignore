@@ -1,12 +1,12 @@
-# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
-
-# dependencies
-node_modules/
+# Keep secrets out of Git, but allow EAS to use them
 
 # Expo
 .expo/
 dist/
 web-build/
+
+# dependencies
+node_modules/
 
 # Native
 .kotlin/
@@ -39,3 +39,8 @@ android
 ios
 service-account.json
 
+# These are needed for EAS Build, so don't ignore them
+!credentials.json
+!certs/_.p12
+!certs/_.mobileprovision
+!auth/\*.p8

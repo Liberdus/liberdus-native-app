@@ -37,6 +37,14 @@ yarn-error.*
 
 android
 ios
+
 service-account.json
 google-services.json
+
+/auth
+/certs
+.easrc
+eas.patch
+credentials.json
+
 

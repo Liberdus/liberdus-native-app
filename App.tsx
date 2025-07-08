@@ -13,6 +13,7 @@ import * as Device from "expo-device";
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Crypto from "expo-crypto";
+import Constants from "expo-constants";
 
 const DEV_NETWORK_URL = "https://liberdus.com/dev";
 const SUBSCRIPTION_API = "https://dev.liberdus.com:3030/notifier/subscribe";
@@ -78,6 +79,7 @@ const App: React.FC = () => {
 
   useEffect(() => {
     (async () => {
+      Notifications.setBadgeCountAsync(0);
       await registerNotificationChannels();
       const token = await getOrCreateDeviceToken();
       console.log("📱 Device Token:", token);
@@ -126,11 +128,20 @@ const App: React.FC = () => {
 
       console.log("📱 Permission status:", finalStatus);
 
-      const tokenData = await Notifications.getExpoPushTokenAsync();
+      const projectId =
+        Constants?.expoConfig?.extra?.eas?.projectId ??
+        Constants?.easConfig?.projectId;
+      if (!projectId) {
+        throw new Error("Project ID not found");
+      }
+      // console.log("📱 Project ID:", projectId);
+
+      const tokenData = await Notifications.getExpoPushTokenAsync({
+        projectId,
+      });
       console.log("📱 Expo Push Token Data:", tokenData);
       const token = tokenData.data;
       setExpoPushToken(token);
-      console.log("📱 Expo Push Token:", token);
 
       // subscribeToServer(deviceToken, token);
     } catch (error) {
