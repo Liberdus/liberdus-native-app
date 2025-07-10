@@ -14,6 +14,7 @@ import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Crypto from "expo-crypto";
 import Constants from "expo-constants";
+import * as Updates from "expo-updates";
 
 const DEV_NETWORK_URL = "https://liberdus.com/dev";
 const SUBSCRIPTION_API = "https://dev.liberdus.com:3030/notifier/subscribe";
@@ -77,19 +78,19 @@ const App: React.FC = () => {
     Notifications.Notification | undefined
   >(undefined);
 
+  const [updateStatus, setUpdateStatus] = useState<string>("");
+
   useEffect(() => {
     (async () => {
       Notifications.setBadgeCountAsync(0);
       await registerNotificationChannels();
       const token = await getOrCreateDeviceToken();
-      console.log("📱 Device Token:", token);
       setDeviceToken(token);
 
       await registerForPushNotificationsAsync(token);
 
       const notificationListener =
         Notifications.addNotificationReceivedListener((notification) => {
-          console.log("📱 Notification Received:", notification);
           setNotification(notification);
         });
 
@@ -97,6 +98,37 @@ const App: React.FC = () => {
         Notifications.addNotificationResponseReceivedListener((response) => {
           console.log("📱 Notification Response Received:", response);
         });
+
+      // 🔄 Auto-update logic
+      if (Updates.isEnabled) {
+        try {
+          const update = await Updates.checkForUpdateAsync();
+          if (update.isAvailable) {
+            setUpdateStatus("🔄 Update available. Applying update...");
+            await Updates.fetchUpdateAsync();
+            setUpdateStatus("✅ Update applied. Reloading...");
+            await Updates.reloadAsync(); // will reload app here
+          } else {
+            setUpdateStatus("");
+          }
+        } catch (err) {
+          console.error("❌ Update error:", err);
+          if (err instanceof Error) {
+            if (
+              err.message.includes("No update is available") ||
+              err.message.includes("Expo Go")
+            ) {
+              setUpdateStatus("");
+            } else {
+              setUpdateStatus("❌ Failed to check/apply update");
+            }
+          } else {
+            setUpdateStatus("❌ Failed to check/apply update");
+          }
+        }
+      } else {
+        setUpdateStatus("⚠️ Updates disabled");
+      }
 
       return () => {
         notificationListener.remove();
@@ -134,7 +166,6 @@ const App: React.FC = () => {
       if (!projectId) {
         throw new Error("Project ID not found");
       }
-      // console.log("📱 Project ID:", projectId);
 
       const tokenData = await Notifications.getExpoPushTokenAsync({
         projectId,
@@ -203,6 +234,7 @@ const App: React.FC = () => {
       <Text style={styles.subtitle}>
         Tap the button below to open the Liberdus app in your default browser
       </Text>
+
       <TouchableOpacity style={styles.button} onPress={openBrowser}>
         <Text style={styles.buttonText}>Launch App</Text>
       </TouchableOpacity>
@@ -225,7 +257,14 @@ const App: React.FC = () => {
               )
             : "Unavailable"}
         </Text>
+        {updateStatus != "" && (
+          <View>
+            <Text style={styles.infoText}>📦 Update status:</Text>
+            <Text style={styles.noteText}>{updateStatus}</Text>
+          </View>
+        )}
       </View>
+
       {notification && (
         <View style={styles.notificationContainer}>
           <Text style={styles.notificationTitle}>📩 Notification:</Text>

@@ -16,7 +16,7 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.yourcompany.liberdus",
+      "bundleIdentifier": "com.jairaj.liberdus",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
@@ -26,7 +26,7 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#FFFFFF"
       },
-      "package": "com.yourcompany.liberdus",
+      "package": "com.jairaj.liberdus",
       "permissions": [
         "android.permission.INTERNET",
         "android.permission.VIBRATE"
