@@ -6,11 +6,6 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
-    },
     "assetBundlePatterns": [
       "**/*"
     ],
@@ -46,11 +41,10 @@
       "policy": "appVersion"
     },
     "updates": {
-      "url": "https://u.expo.dev/b69683fc-e52c-4b79-a328-28d96aabe023"
+      "enabled": false
     },
     "plugins": [
-      "expo-notifications",
-      "expo-updates"
+      "expo-notifications"
     ]
   }
 }

@@ -14,22 +14,22 @@
     "submit:ios": "eas submit --platform ios"
   },
   "dependencies": {
+    "@react-native-async-storage/async-storage": "2.1.2",
     "axios": "^1.10.0",
     "expo": "~53.0.15",
     "expo-crypto": "~14.1.5",
+    "expo-dev-client": "~5.2.4",
     "expo-device": "~7.1.4",
     "expo-linking": "^7.1.6",
+    "expo-notifications": "~0.31.3",
     "expo-status-bar": "~2.2.3",
     "react": "19.0.0",
     "react-native": "0.79.4",
-    "uuid": "^11.1.0",
-    "@react-native-async-storage/async-storage": "2.1.2",
-    "expo-notifications": "~0.31.3",
-    "expo-updates": "~0.28.15",
-    "expo-dev-client": "~5.2.4"
+    "uuid": "^11.1.0"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
+    "@react-native-community/cli": "^19.1.0",
     "@types/react": "~19.0.10",
     "typescript": "~5.8.3"
   },
