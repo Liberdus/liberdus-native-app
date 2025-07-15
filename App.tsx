@@ -8,10 +8,12 @@ import {
   Platform,
   TextInput,
   ScrollView,
+  SafeAreaView,
 } from "react-native";
 import { AppState } from "react-native";
 import { useRef } from "react";
 import * as Linking from "expo-linking";
+import { WebView } from "react-native-webview";
 import * as Notifications from "expo-notifications";
 import * as Device from "expo-device";
 import axios from "axios";
@@ -103,6 +105,7 @@ export async function getOrCreateDeviceToken(): Promise<string> {
 
 const App: React.FC = () => {
   const appState = useRef(AppState.currentState);
+  const webViewRef = useRef<WebView>(null);
   const [deviceToken, setDeviceToken] = useState<string | null>(null);
   const [expoPushToken, setExpoPushToken] = useState<string | null>(null);
   const [notification, setNotification] = useState<
@@ -112,8 +115,10 @@ const App: React.FC = () => {
   const [selectedNetwork, setSelectedNetwork] = useState<string>("dev");
   const [customUrl, setCustomUrl] = useState<string>("");
   const [showCustomInput, setShowCustomInput] = useState<boolean>(false);
-
   const [hasLaunchedOnce, setHasLaunchedOnce] = useState(false);
+  const [showWebView, setShowWebView] = useState(false);
+  const [webViewUrl, setWebViewUrl] = useState<string>("");
+  const [canGoBack, setCanGoBack] = useState(false);
 
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (nextAppState) => {
@@ -313,6 +318,7 @@ const App: React.FC = () => {
       Alert.alert("Error", "Please select a network or enter a custom URL");
       return;
     }
+
     if (!deviceToken || !expoPushToken) {
       console.log(
         "❌ Missing deviceToken or expoPushToken:",
@@ -324,6 +330,8 @@ const App: React.FC = () => {
     try {
       const urlWithParams = `${url}?device_token=${deviceToken}&push_token=${expoPushToken}`;
       await Linking.openURL(urlWithParams);
+      setWebViewUrl(urlWithParams);
+      setShowWebView(true);
       setHasLaunchedOnce(true);
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
@@ -335,16 +343,69 @@ const App: React.FC = () => {
     }
   };
 
+  const handleWebViewNavigationStateChange = (navState: any) => {
+    setCanGoBack(navState.canGoBack);
+  };
+
+  const handleGoBack = () => {
+    if (canGoBack && webViewRef.current) {
+      webViewRef.current.goBack();
+    } else {
+      setShowWebView(false);
+    }
+  };
+
+  const handleRefresh = () => {
+    if (webViewRef.current) {
+      webViewRef.current.reload();
+    }
+  };
+
   if (!hasLaunchedOnce) {
     return <AnimatedSplash />;
+  }
+
+  if (showWebView) {
+    return (
+      <SafeAreaView style={styles.webViewContainer}>
+        <WebView
+          ref={webViewRef}
+          source={{ uri: webViewUrl }}
+          style={styles.webView}
+          onNavigationStateChange={handleWebViewNavigationStateChange}
+          onError={(syntheticEvent) => {
+            const { nativeEvent } = syntheticEvent;
+            console.error("WebView error: ", nativeEvent);
+            Alert.alert("WebView Error", "Failed to load the page");
+          }}
+          // Enable JavaScript
+          javaScriptEnabled={true}
+          // Enable DOM storage
+          domStorageEnabled={true}
+          // Allow mixed content (HTTP and HTTPS)
+          mixedContentMode="compatibility"
+          // Allow universal access from file URLs
+          allowUniversalAccessFromFileURLs={true}
+          // Start in loading state
+          startInLoadingState={true}
+          // Allow file access
+          allowFileAccess={true}
+          // Bounce effect on iOS
+          bounces={false}
+          // Scroll enabled
+          scrollEnabled={false}
+        />
+      </SafeAreaView>
+    );
   }
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.title}>{getCurrentTitle()}</Text>
       <Text style={styles.subtitle}>
-        Choose a network and tap Launch App to open the app in your default
-        browser
+        {/* Choose a network and tap Launch App to open the app in your default
+        browser  */}
+        Choose a network and tap Launch App to open the app
       </Text>
 
       <Text style={styles.sectionTitle}>Select Network</Text>
@@ -364,7 +425,6 @@ const App: React.FC = () => {
           </TouchableOpacity>
         ))}
       </View>
-      {/* </View> */}
 
       {showCustomInput && (
         <View style={styles.customInputContainer}>
@@ -443,6 +503,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     padding: 20,
+  },
+  webViewContainer: {
+    flex: 1,
+    backgroundColor: "#fff",
+  },
+  webView: {
+    flex: 1,
   },
   title: {
     fontSize: 26,
