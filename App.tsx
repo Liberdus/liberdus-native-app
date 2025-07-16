@@ -329,7 +329,7 @@ const App: React.FC = () => {
 
     try {
       const urlWithParams = `${url}?device_token=${deviceToken}&push_token=${expoPushToken}`;
-      await Linking.openURL(urlWithParams);
+      // await Linking.openURL(urlWithParams);
       setWebViewUrl(urlWithParams);
       setShowWebView(true);
       setHasLaunchedOnce(true);
