@@ -9,21 +9,23 @@ import {
   TextInput,
   ScrollView,
   SafeAreaView,
+  StatusBar,
+  KeyboardAvoidingView,
 } from "react-native";
 import { AppState } from "react-native";
 import { useRef } from "react";
 import * as Linking from "expo-linking";
 import { WebView } from "react-native-webview";
 import * as Notifications from "expo-notifications";
+import * as NavigationBar from "expo-navigation-bar";
 import * as Device from "expo-device";
-import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Crypto from "expo-crypto";
 import Constants from "expo-constants";
-// import * as Updates from "expo-updates";
+import * as FileSystem from "expo-file-system";
+import * as Sharing from "expo-sharing";
 import AnimatedSplash from "./SplashScreen";
 
-const SUBSCRIPTION_API = "https://dev.liberdus.com:3030/notifier/subscribe";
 const DEVICE_TOKEN_KEY = "device_token";
 
 const Network = {
@@ -121,24 +123,33 @@ const App: React.FC = () => {
   const [canGoBack, setCanGoBack] = useState(false);
 
   useEffect(() => {
-    const subscription = AppState.addEventListener("change", (nextAppState) => {
-      if (
-        appState.current.match(/inactive|background/) &&
-        nextAppState === "active"
-      ) {
-        // App has come to foreground
-        console.log("🔄 App resumed from background");
-      }
+    const subscription = AppState.addEventListener(
+      "change",
+      async (nextAppState) => {
+        if (
+          appState.current.match(/inactive|background/) &&
+          nextAppState === "active"
+        ) {
+          // App has come to foreground
+          console.log("🔄 App resumed from background");
+          await Notifications.setBadgeCountAsync(0);
+        }
 
-      appState.current = nextAppState;
-    });
+        appState.current = nextAppState;
+      }
+    );
 
     return () => subscription.remove();
   }, []);
 
   useEffect(() => {
+    NavigationBar.setVisibilityAsync("hidden");
+    NavigationBar.setBehaviorAsync("overlay-swipe");
+  }, []);
+
+  useEffect(() => {
     (async () => {
-      Notifications.setBadgeCountAsync(0);
+      await Notifications.setBadgeCountAsync(0);
       // await pullUpdates();
       await registerNotificationChannels();
       const token = await getOrCreateDeviceToken();
@@ -173,45 +184,6 @@ const App: React.FC = () => {
     if (!deviceToken || !expoPushToken) return;
     openBrowser();
   }, [deviceToken, expoPushToken, hasLaunchedOnce]);
-
-  // const pullUpdates = async () => {
-  //   // 🔄 Improved auto-update logic
-  //   if (Updates.isEnabled) {
-  //     try {
-  //       const update = await Updates.checkForUpdateAsync();
-  //       if (update.isAvailable) {
-  //         setUpdateStatus("📥 Downloading update...");
-  //         await Updates.fetchUpdateAsync();
-  //         setUpdateStatus("✅ Update ready! Restarting...");
-  //         // Give user a moment to see the message
-  //         setTimeout(async () => {
-  //           await Updates.reloadAsync();
-  //         }, 1000);
-  //       } else {
-  //         setUpdateStatus("✅ App is up to date");
-  //         // Clear the message after a few seconds
-  //         setTimeout(() => setUpdateStatus(""), 3000);
-  //       }
-  //     } catch (err) {
-  //       console.error("❌ Update error:", err);
-  //       let errorMessage = "❌ Update check failed";
-  //       if (err instanceof Error) {
-  //         if (
-  //           err.message.includes("No update is available") ||
-  //           err.message.includes("Expo Go")
-  //         ) {
-  //           setUpdateStatus("");
-  //         } else {
-  //           setUpdateStatus(errorMessage);
-  //         }
-  //       } else {
-  //         setUpdateStatus(errorMessage);
-  //       }
-  //     }
-  //   } else {
-  //     setUpdateStatus("⚠️ Updates disabled");
-  //   }
-  // };
 
   const registerForPushNotificationsAsync = async () => {
     try {
@@ -259,35 +231,6 @@ const App: React.FC = () => {
       );
       Alert.alert("Error", "Failed to configure push notifications");
       return false;
-    }
-  };
-
-  const subscribeToServer = async (
-    deviceToken: string,
-    expoPushToken: string
-  ) => {
-    try {
-      const payload = {
-        deviceToken,
-        expoPushToken,
-        addresses: [
-          "2c9485418b492fb5be57bec4dc6a5eedf082d257000000000000000000000000", // jrp
-          "fa7e9c5fbd02d485f3b527908d6f400fe63c2fbc000000000000000000000000", // jrl
-        ],
-      };
-
-      const response = await axios.post(SUBSCRIPTION_API, payload);
-      console.log("✅ Subscribed to notification server:", response.data);
-    } catch (error) {
-      console.error(
-        "❌ Failed to subscribe:",
-        axios.isAxiosError(error)
-          ? error.response?.data
-          : error instanceof Error
-          ? error.message
-          : String(error)
-      );
-      Alert.alert("Error", "Failed to subscribe to notification server");
     }
   };
 
@@ -347,18 +290,109 @@ const App: React.FC = () => {
     setCanGoBack(navState.canGoBack);
   };
 
-  const handleGoBack = () => {
-    if (canGoBack && webViewRef.current) {
-      webViewRef.current.goBack();
-    } else {
-      setShowWebView(false);
+  const handleWebViewMessage = async (event) => {
+    try {
+      const data = JSON.parse(event.nativeEvent.data);
+
+      if (data.type === "EXPORT_BACKUP") {
+        const { dataUrl, filename } = data;
+        console.log("📦 Received backup file");
+
+        // Extract base64 content from data URL
+        const base64 = dataUrl.split(",")[1];
+        const mimeType =
+          dataUrl.match(/^data:(.*);base64/)?.[1] || "application/json";
+
+        // Save to temporary file first
+        const tempFileUri = FileSystem.cacheDirectory + filename;
+        await FileSystem.writeAsStringAsync(tempFileUri, base64, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+
+        console.log("📁 Temp file saved at:", tempFileUri);
+
+        if (Platform.OS === "ios") {
+          // iOS: Show share dialog
+          if (await Sharing.isAvailableAsync()) {
+            await Sharing.shareAsync(tempFileUri);
+          } else {
+            Alert.alert("File Saved", "Backup saved to: " + tempFileUri);
+          }
+        } else {
+          // Android: Ask user to pick folder and save using SAF
+          Alert.alert(
+            "Select Save Location",
+            "📁 Please choose a folder (e.g., inside Downloads) to save your backup file.",
+            [
+              {
+                text: "Continue",
+                onPress: async () => {
+                  const permissions =
+                    await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
+
+                  if (!permissions.granted) {
+                    Alert.alert(
+                      "Permission Denied",
+                      "Storage access was not granted."
+                    );
+                    return;
+                  }
+
+                  const dirUri = permissions.directoryUri;
+
+                  try {
+                    const fileUri =
+                      await FileSystem.StorageAccessFramework.createFileAsync(
+                        dirUri,
+                        filename,
+                        mimeType
+                      );
+
+                    await FileSystem.writeAsStringAsync(fileUri, base64, {
+                      encoding: FileSystem.EncodingType.Base64,
+                    });
+
+                    console.log("✅ File saved to:", fileUri);
+                    Alert.alert("Backup Saved", "File saved to: " + filename);
+                  } catch (err) {
+                    console.error("❌ Failed to save using SAF:", err);
+                    Alert.alert("Error", "Failed to save file: " + err.message);
+                  }
+                },
+              },
+            ]
+          );
+        }
+      }
+
+      // Existing fallback
+      if (data.type === "OPEN_DOWNLOAD") {
+        const url = data.url;
+        const isBlob = url.startsWith("blob:");
+        if (isBlob) {
+          Alert.alert(
+            "Unsupported Download",
+            "Direct blob: URLs are not supported."
+          );
+        } else {
+          Linking.openURL(url);
+        }
+      }
+    } catch (err) {
+      console.error("❌ WebView message error:", err);
     }
   };
 
-  const handleRefresh = () => {
-    if (webViewRef.current) {
-      webViewRef.current.reload();
-    }
+  const isExternalLink = (current: string, test: string): boolean => {
+    const a = new URL(current);
+    const b = new URL(test);
+
+    if (a.origin !== b.origin) return true;
+
+    const aPath = a.pathname.replace(/\/+$/, "");
+    const bPath = b.pathname.replace(/\/+$/, "");
+
+    return bPath !== aPath;
   };
 
   if (!hasLaunchedOnce) {
@@ -367,40 +401,80 @@ const App: React.FC = () => {
 
   if (showWebView) {
     return (
-      <SafeAreaView style={styles.webViewContainer}>
-        <WebView
-          ref={webViewRef}
-          source={{ uri: webViewUrl }}
-          style={styles.webView}
-          onNavigationStateChange={handleWebViewNavigationStateChange}
-          onError={(syntheticEvent) => {
-            const { nativeEvent } = syntheticEvent;
-            console.error("WebView error: ", nativeEvent);
-            Alert.alert("WebView Error", "Failed to load the page");
-          }}
-          // Enable JavaScript
-          javaScriptEnabled={true}
-          // Enable DOM storage
-          domStorageEnabled={true}
-          // Allow mixed content (HTTP and HTTPS)
-          mixedContentMode="compatibility"
-          // Allow universal access from file URLs
-          allowUniversalAccessFromFileURLs={true}
-          // Start in loading state
-          startInLoadingState={true}
-          // Allow file access
-          allowFileAccess={true}
-          // Bounce effect on iOS
-          bounces={false}
-          // Scroll enabled
-          scrollEnabled={false}
+      <SafeAreaView
+        style={{
+          ...styles.webViewContainer,
+          paddingTop: StatusBar.currentHeight,
+        }}
+      >
+        <StatusBar
+          translucent
+          backgroundColor="transparent"
+          barStyle="dark-content" // or "light-content" depending on your UI
         />
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          keyboardVerticalOffset={0}
+        >
+          <WebView
+            ref={webViewRef}
+            source={{ uri: webViewUrl }}
+            style={styles.webView}
+            onNavigationStateChange={handleWebViewNavigationStateChange}
+            onError={(syntheticEvent) => {
+              const { nativeEvent } = syntheticEvent;
+              console.error("WebView error: ", nativeEvent);
+              Alert.alert("WebView Error", "Failed to load the page");
+            }}
+            // Enable JavaScript
+            javaScriptEnabled={true}
+            // Enable DOM storage
+            domStorageEnabled={true}
+            // Allow mixed content (HTTP and HTTPS)
+            mixedContentMode="compatibility"
+            // Allow universal access from file URLs
+            allowUniversalAccessFromFileURLs={true}
+            // Start in loading state
+            startInLoadingState={true}
+            // Allow file access
+            allowFileAccess={true}
+            onShouldStartLoadWithRequest={(request) => {
+              const url = request.url;
+              const openInBrowser = isExternalLink(getCurrentUrl(), url);
+              console.log(
+                "🔗 onShouldStartLoadWithRequest URL:",
+                url,
+                getCurrentUrl(),
+                openInBrowser
+              );
+              if (openInBrowser) {
+                Linking.openURL(url);
+                return false; // prevent WebView from loading it
+              }
+
+              return true; // allow normal navigation
+            }}
+            // Needed for iOS to make `onShouldStartLoadWithRequest` work
+            setSupportMultipleWindows={false}
+            onMessage={handleWebViewMessage}
+            // Bounce effect on iOS
+            bounces={true}
+            // Scroll enabled
+            scrollEnabled={true}
+          />
+        </KeyboardAvoidingView>
       </SafeAreaView>
     );
   }
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
+      <StatusBar
+        translucent
+        backgroundColor="transparent"
+        barStyle="dark-content" // or "light-content" depending on your UI
+      />
       <Text style={styles.title}>{getCurrentTitle()}</Text>
       <Text style={styles.subtitle}>
         {/* Choose a network and tap Launch App to open the app in your default

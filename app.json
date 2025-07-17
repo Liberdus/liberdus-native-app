@@ -2,7 +2,7 @@
   "expo": {
     "name": "Liberdus",
     "slug": "liberdus",
-    "version": "1.0.1",
+    "version": "2025.07.17.02.09",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -13,11 +13,12 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.jairaj.liberdus",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSCameraUsageDescription": "This app uses the camera to capture photos or videos."
       }
     },
     "android": {
-      "versionCode": 12,
+      "versionCode": 13,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#FFFFFF"
@@ -25,7 +26,8 @@
       "package": "com.jairaj.liberdus",
       "permissions": [
         "android.permission.INTERNET",
-        "android.permission.VIBRATE"
+        "android.permission.VIBRATE",
+        "android.permission.CAMERA"
       ],
       "googleServicesFile": "./google-services.json"
     },
