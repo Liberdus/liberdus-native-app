@@ -10,6 +10,7 @@
       "**/*"
     ],
     "ios": {
+      "buildNumber": "6",
       "supportsTablet": true,
       "bundleIdentifier": "com.jairaj.liberdus",
       "infoPlist": {

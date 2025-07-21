@@ -363,20 +363,8 @@ const App: React.FC = () => {
             ]
           );
         }
-      }
-
-      // Existing fallback
-      if (data.type === "OPEN_DOWNLOAD") {
-        const url = data.url;
-        const isBlob = url.startsWith("blob:");
-        if (isBlob) {
-          Alert.alert(
-            "Unsupported Download",
-            "Direct blob: URLs are not supported."
-          );
-        } else {
-          Linking.openURL(url);
-        }
+      } else {
+        console.error("❌ Unexpected message received:", data);
       }
     } catch (err) {
       console.error("❌ WebView message error:", err);
@@ -419,9 +407,14 @@ const App: React.FC = () => {
         >
           <WebView
             ref={webViewRef}
+            // nativeConfig={{ props: { webContentsDebuggingEnabled: true } }}
             source={{ uri: webViewUrl }}
             style={styles.webView}
             onNavigationStateChange={handleWebViewNavigationStateChange}
+            allowsInlineMediaPlayback={true} // ✅ Required for <video> on iOS
+            mediaPlaybackRequiresUserAction={false} // ✅ Let camera start automatically
+            allowsFullscreenVideo
+            useWebView2
             onError={(syntheticEvent) => {
               const { nativeEvent } = syntheticEvent;
               console.error("WebView error: ", nativeEvent);
