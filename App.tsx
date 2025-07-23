@@ -299,6 +299,18 @@ const App: React.FC = () => {
     try {
       const data = JSON.parse(event.nativeEvent.data);
 
+      if (data.type === "GET_APP_URL") {
+        // Get the current app_url from AsyncStorage or use the default
+        const url = (await AsyncStorage.getItem(APP_URL_KEY)) || APP_URL;
+        // Send it back to the WebView
+        if (webViewRef.current) {
+          webViewRef.current.postMessage(
+            JSON.stringify({ type: "APP_URL", url })
+          );
+        }
+        return;
+      }
+
       if (data.type === "EXPORT_BACKUP") {
         const { dataUrl, filename } = data;
         console.log("📦 Received backup file");
