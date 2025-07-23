@@ -26,7 +26,11 @@ import * as FileSystem from "expo-file-system";
 import * as Sharing from "expo-sharing";
 import AnimatedSplash from "./SplashScreen";
 
+const APP_URL = "https://liberdus.com/dev";
+
+// Storage keys
 const DEVICE_TOKEN_KEY = "device_token";
+const APP_URL_KEY = "app_url";
 
 const Network = {
   main: {
@@ -256,11 +260,12 @@ const App: React.FC = () => {
   };
 
   const openBrowser = async () => {
-    const url = getCurrentUrl();
-    if (!url) {
-      Alert.alert("Error", "Please select a network or enter a custom URL");
-      return;
-    }
+    // const url = getCurrentUrl();
+    // if (!url) {
+    //   Alert.alert("Error", "Please select a network or enter a custom URL");
+    //   return;
+    // }
+    const url = (await AsyncStorage.getItem(APP_URL_KEY)) || APP_URL;
 
     if (!deviceToken || !expoPushToken) {
       console.log(
@@ -408,6 +413,29 @@ const App: React.FC = () => {
             ]
           );
         }
+      } else if (data.type === "launch") {
+        const { url } = data;
+        console.log("🚀 Launch message received with URL:", url);
+
+        // Close current web view and open new URL
+        setShowWebView(false);
+
+        // save URL to AsyncStorage
+        await AsyncStorage.setItem(APP_URL_KEY, url);
+
+        // Add a small delay to ensure the web view is properly closed before opening new one
+        setTimeout(() => {
+          // Add device and push tokens to the new URL if they exist
+          let newUrl = url;
+          if (deviceToken && expoPushToken) {
+            const separator = url.includes("?") ? "&" : "?";
+            newUrl = `${url}${separator}device_token=${deviceToken}&push_token=${expoPushToken}`;
+          }
+
+          console.log("🔗 Opening new URL in WebView:", newUrl);
+          setWebViewUrl(newUrl);
+          setShowWebView(true);
+        }, 100);
       } else {
         console.error("❌ Unexpected message received:", data);
       }
@@ -479,11 +507,11 @@ const App: React.FC = () => {
             allowFileAccess={true}
             onShouldStartLoadWithRequest={(request) => {
               const url = request.url;
-              const openInBrowser = isExternalLink(getCurrentUrl(), url);
+              const openInBrowser = isExternalLink(webViewUrl, url);
               console.log(
                 "🔗 onShouldStartLoadWithRequest URL:",
                 url,
-                getCurrentUrl(),
+                webViewUrl,
                 openInBrowser
               );
               if (openInBrowser) {
