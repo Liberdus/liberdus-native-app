@@ -363,6 +363,51 @@ const App: React.FC = () => {
             ]
           );
         }
+      } else if (data.type === "DOWNLOAD_ATTACHMENT") {
+        const { dataUrl, filename, mime } = data;
+
+        // pull out base‑64
+        const base64 = dataUrl.split(",")[1];
+        const mimeType = mime || "application/octet-stream";
+
+        const tempFileUri = FileSystem.cacheDirectory + filename;
+        await FileSystem.writeAsStringAsync(tempFileUri, base64, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+
+        if (Platform.OS === "ios") {
+          if (await Sharing.isAvailableAsync()) {
+            await Sharing.shareAsync(tempFileUri, { UTI: mimeType });
+          } else {
+            Alert.alert("File Saved", "Attachment saved to: " + tempFileUri);
+          }
+        } else {
+          Alert.alert(
+            "Select Save Location",
+            "📁 Choose a folder (e.g. Downloads) to save your file.",
+            [
+              {
+                text: "Continue",
+                onPress: async () => {
+                  const permissions =
+                    await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
+                  if (!permissions.granted) return;
+
+                  const fileUri =
+                    await FileSystem.StorageAccessFramework.createFileAsync(
+                      permissions.directoryUri,
+                      filename,
+                      mimeType
+                    );
+                  await FileSystem.writeAsStringAsync(fileUri, base64, {
+                    encoding: FileSystem.EncodingType.Base64,
+                  });
+                  Alert.alert("Saved", "File saved to: " + filename);
+                },
+              },
+            ]
+          );
+        }
       } else {
         console.error("❌ Unexpected message received:", data);
       }
