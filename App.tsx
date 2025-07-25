@@ -551,7 +551,8 @@ const App: React.FC = () => {
   if (showWebView) {
     return (
       <SafeAreaView style={styles.container}>
-        <StatusBar hidden={true} />
+        {/** On Android, this makes Keyboard to cover the input box on focus */}
+        {/* <StatusBar hidden={true} /> */}
         <KeyboardAvoidingView
           style={{ flex: 1 }}
           behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -564,7 +565,7 @@ const App: React.FC = () => {
             style={styles.webView}
             allowsInlineMediaPlayback={true} // ✅ Required for <video> on iOS
             mediaPlaybackRequiresUserAction={false} // ✅ Let camera start automatically
-            allowsFullscreenVideo
+            // allowsFullscreenVideo // On Android, this makes Keyboard to cover the input box on focus
             useWebView2
             onError={(syntheticEvent) => {
               const { nativeEvent } = syntheticEvent;
