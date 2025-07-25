@@ -22,7 +22,7 @@ import * as FileSystem from "expo-file-system";
 import * as Sharing from "expo-sharing";
 import FileViewer from "react-native-file-viewer";
 import AnimatedSplash from "./SplashScreen";
-import NetInfo from "@react-native-community/netinfo";
+// import NetInfo from "@react-native-community/netinfo";
 
 const APP_URL = "https://liberdus.com/test/";
 
@@ -111,12 +111,6 @@ const App: React.FC = () => {
     const subscription = AppState.addEventListener(
       "change",
       async (nextAppState) => {
-        console.log(
-          "🔄 App state changed:",
-          appState.current,
-          "to",
-          nextAppState
-        );
         if (
           appState.current.match(/inactive|background/) &&
           nextAppState === "active"
@@ -125,11 +119,14 @@ const App: React.FC = () => {
           console.log("🔄 App resumed from background");
           await Notifications.setBadgeCountAsync(0);
 
-          // if (appState.current === "background") {
-          //   // Check network connectivity
-          //   const netInfo = await NetInfo.fetch();
-          //   setIsConnected(netInfo.isConnected ?? false);
-          // }
+          if (appState.current === "background") {
+            // Check network connectivity
+            // const netInfo = await NetInfo.fetch();
+            // setIsConnected(netInfo.isConnected ?? false);
+
+            // Check if web app is in white screen
+            runWhiteScreenCheck();
+          }
         }
         appState.current = nextAppState;
       }
@@ -447,6 +444,8 @@ const App: React.FC = () => {
     try {
       const data = JSON.parse(event.nativeEvent.data);
 
+      // console.log("📡 Received message:", data);
+
       if (data.type === "EXPORT_BACKUP") {
         const { dataUrl, filename } = data;
         const base64 = dataUrl.split(",")[1];
@@ -486,11 +485,30 @@ const App: React.FC = () => {
           setWebViewUrl(newUrl);
           setShowWebView(true);
         }, 100);
+      } else if (data.type === "WHITE_SCREEN_DETECTED") {
+        console.warn("⚪ White screen detected. Reloading WebView...");
+        webViewRef.current?.reload();
       } else {
         console.error("❌ Unexpected message received:", data);
       }
     } catch (err) {
       console.error("❌ WebView message error:", err);
+    }
+  };
+
+  const runWhiteScreenCheck = () => {
+    if (webViewRef.current) {
+      webViewRef.current.injectJavaScript(`
+      (function() {
+        const bg = getComputedStyle(document.body).backgroundColor;
+        const isWhite = bg === 'rgb(255, 255, 255)' || bg === '#ffffff';
+        const isEmpty = document.body.innerText.trim().length === 0;
+        if (isWhite && isEmpty) {
+          window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'WHITE_SCREEN_DETECTED' }));
+        }
+      })();
+      true;
+    `);
     }
   };
 
