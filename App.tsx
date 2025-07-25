@@ -11,6 +11,7 @@ import {
   SafeAreaView,
   StatusBar,
   KeyboardAvoidingView,
+  AlertButton,
 } from "react-native";
 import { AppState } from "react-native";
 import { useRef } from "react";
@@ -24,6 +25,7 @@ import * as Crypto from "expo-crypto";
 import Constants from "expo-constants";
 import * as FileSystem from "expo-file-system";
 import * as Sharing from "expo-sharing";
+import FileViewer from "react-native-file-viewer";
 import AnimatedSplash from "./SplashScreen";
 
 const APP_URL = "https://liberdus.com/dev";
@@ -109,6 +111,23 @@ export async function getOrCreateDeviceToken(): Promise<string> {
   return uuid;
 }
 
+// Check if file can be viewed by FileViewer
+const isViewableFile = (filename: string, mimeType: string): boolean => {
+  // Check by MIME type
+  const viewableMimeTypes = [
+    "image/", // All images
+    "text/", // Text files
+    "application/pdf", // PDFs
+    "video/", // Videos
+    "audio/", // Audio files
+    "application/json", // JSON
+    "application/xml", // XML
+    "text/xml", // XML (alternative)
+  ];
+
+  return viewableMimeTypes.some((type) => mimeType.startsWith(type));
+};
+
 const App: React.FC = () => {
   const appState = useRef(AppState.currentState);
   const webViewRef = useRef<WebView>(null);
@@ -117,7 +136,6 @@ const App: React.FC = () => {
   const [notification, setNotification] = useState<
     Notifications.Notification | undefined
   >(undefined);
-  // const [updateStatus, setUpdateStatus] = useState<string>("");
   const [selectedNetwork, setSelectedNetwork] = useState<string>("dev");
   const [customUrl, setCustomUrl] = useState<string>("");
   const [showCustomInput, setShowCustomInput] = useState<boolean>(false);
@@ -138,7 +156,6 @@ const App: React.FC = () => {
           console.log("🔄 App resumed from background");
           await Notifications.setBadgeCountAsync(0);
         }
-
         appState.current = nextAppState;
       }
     );
@@ -154,7 +171,6 @@ const App: React.FC = () => {
   useEffect(() => {
     (async () => {
       await Notifications.setBadgeCountAsync(0);
-      // await pullUpdates();
       await registerNotificationChannels();
       const token = await getOrCreateDeviceToken();
       console.log("📱 Device Token:", token);
@@ -226,7 +242,6 @@ const App: React.FC = () => {
       const token = tokenData.data;
       setExpoPushToken(token);
 
-      // subscribeToServer(deviceToken, token);
       return true;
     } catch (error) {
       console.error(
@@ -260,11 +275,6 @@ const App: React.FC = () => {
   };
 
   const openBrowser = async () => {
-    // const url = getCurrentUrl();
-    // if (!url) {
-    //   Alert.alert("Error", "Please select a network or enter a custom URL");
-    //   return;
-    // }
     const url = (await AsyncStorage.getItem(APP_URL_KEY)) || APP_URL;
 
     if (!deviceToken || !expoPushToken) {
@@ -277,7 +287,6 @@ const App: React.FC = () => {
 
     try {
       const urlWithParams = `${url}?device_token=${deviceToken}&push_token=${expoPushToken}`;
-      // await Linking.openURL(urlWithParams);
       setWebViewUrl(urlWithParams);
       setShowWebView(true);
       setHasLaunchedOnce(true);
@@ -295,124 +304,205 @@ const App: React.FC = () => {
     setCanGoBack(navState.canGoBack);
   };
 
+  // Simple file handling with download option
+  const handleFileDownload = async (
+    base64Data: string,
+    filename: string,
+    mimeType: string,
+    showOpenOption = true
+  ) => {
+    try {
+      console.log(`📥 Processing file download: ${filename} (${mimeType})`);
+
+      // Check if file is viewable
+      const showOpen = showOpenOption && isViewableFile(filename, mimeType);
+
+      // Show download confirmation with conditional options
+      const alertOptions: AlertButton[] = [
+        {
+          text: "Download",
+          onPress: () => downloadFile(base64Data, filename, mimeType),
+        },
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+      ];
+
+      // Only add "Open" option if file is viewable
+      if (showOpen) {
+        alertOptions.unshift({
+          text: "Open",
+          onPress: () => openFile(base64Data, filename, mimeType),
+        });
+      }
+
+      Alert.alert(
+        `Filename - ${filename}`,
+        "Choose an action for this file:",
+        alertOptions
+      );
+    } catch (error) {
+      console.error("❌ Error handling file download:", error);
+      Alert.alert(
+        "Error",
+        `Could not process ${filename}. ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+    }
+  };
+
+  // Open file immediately
+  const openFile = async (
+    base64Data: string,
+    filename: string,
+    mimeType: string
+  ) => {
+    try {
+      const sanitizedFilename = filename.replace(/[^a-zA-Z0-9.-]/g, "_");
+      const tempFileUri = FileSystem.documentDirectory + sanitizedFilename;
+
+      await FileSystem.writeAsStringAsync(tempFileUri, base64Data, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+
+      await FileViewer.open(tempFileUri, {
+        showOpenWithDialog: true,
+        showAppsSuggestions: true,
+        displayName: filename,
+      });
+
+      console.log("✅ File opened successfully");
+    } catch (error) {
+      console.log("⚠️ FileViewer failed, trying share:", error);
+      // Fallback to share
+      await shareFile(base64Data, filename, mimeType);
+    }
+  };
+
+  // Download file to device
+  const downloadFile = async (
+    base64Data: string,
+    filename: string,
+    mimeType: string
+  ) => {
+    try {
+      if (Platform.OS === "android") {
+        // Android: Use Storage Access Framework for Downloads
+        const permissions =
+          await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
+
+        if (!permissions.granted) {
+          Alert.alert(
+            "Permission Denied",
+            "Storage access is required to download files."
+          );
+          return;
+        }
+
+        const fileUri = await FileSystem.StorageAccessFramework.createFileAsync(
+          permissions.directoryUri,
+          filename,
+          mimeType
+        );
+
+        await FileSystem.writeAsStringAsync(fileUri, base64Data, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+
+        Alert.alert(
+          "Download Complete",
+          `${filename} has been downloaded successfully!`,
+          [{ text: "OK" }]
+        );
+      } else {
+        // iOS: Save to app's documents and share
+        const sanitizedFilename = filename.replace(/[^a-zA-Z0-9.-]/g, "_");
+        const fileUri = FileSystem.documentDirectory + sanitizedFilename;
+
+        await FileSystem.writeAsStringAsync(fileUri, base64Data, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+
+        if (await Sharing.isAvailableAsync()) {
+          await Sharing.shareAsync(fileUri, {
+            mimeType: mimeType,
+            dialogTitle: `Save ${filename}`,
+          });
+        }
+      }
+
+      console.log("✅ File downloaded successfully");
+    } catch (error) {
+      console.error("❌ Download failed:", error);
+      Alert.alert("Download Error", "Could not download the file.");
+    }
+  };
+
+  // Share file using system share
+  const shareFile = async (
+    base64Data: string,
+    filename: string,
+    mimeType: string
+  ) => {
+    try {
+      const sanitizedFilename = filename.replace(/[^a-zA-Z0-9.-]/g, "_");
+      const tempFileUri = FileSystem.documentDirectory + sanitizedFilename;
+
+      await FileSystem.writeAsStringAsync(tempFileUri, base64Data, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(tempFileUri, {
+          mimeType: mimeType,
+          dialogTitle: `Open ${filename} with...`,
+        });
+        console.log("✅ File shared successfully");
+
+        // Clean up temp file after a delay
+        setTimeout(async () => {
+          try {
+            const fileInfo = await FileSystem.getInfoAsync(tempFileUri);
+            if (fileInfo.exists) {
+              await FileSystem.deleteAsync(tempFileUri);
+              console.log("🗑️ Cleaned up temp file");
+            }
+          } catch (cleanupError) {
+            console.log("Cleanup error (non-critical):", cleanupError);
+          }
+        }, 30000); // Clean up after 30 seconds
+      } else {
+        throw new Error("Sharing not available");
+      }
+    } catch (error) {
+      console.error("❌ Sharing failed:", error);
+      Alert.alert("Error", "Could not share file");
+    }
+  };
+
+  // Main WebView message handler - much simpler now!
   const handleWebViewMessage = async (event) => {
     try {
       const data = JSON.parse(event.nativeEvent.data);
 
       if (data.type === "EXPORT_BACKUP") {
         const { dataUrl, filename } = data;
-        console.log("📦 Received backup file");
-
-        // Extract base64 content from data URL
         const base64 = dataUrl.split(",")[1];
         const mimeType =
           dataUrl.match(/^data:(.*);base64/)?.[1] || "application/json";
 
-        // Save to temporary file first
-        const tempFileUri = FileSystem.cacheDirectory + filename;
-        await FileSystem.writeAsStringAsync(tempFileUri, base64, {
-          encoding: FileSystem.EncodingType.Base64,
-        });
-
-        console.log("📁 Temp file saved at:", tempFileUri);
-
-        if (Platform.OS === "ios") {
-          // iOS: Show share dialog
-          if (await Sharing.isAvailableAsync()) {
-            await Sharing.shareAsync(tempFileUri);
-          } else {
-            Alert.alert("File Saved", "Backup saved to: " + tempFileUri);
-          }
-        } else {
-          // Android: Ask user to pick folder and save using SAF
-          Alert.alert(
-            "Select Save Location",
-            "📁 Please choose a folder (e.g., inside Downloads) to save your backup file.",
-            [
-              {
-                text: "Continue",
-                onPress: async () => {
-                  const permissions =
-                    await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
-
-                  if (!permissions.granted) {
-                    Alert.alert(
-                      "Permission Denied",
-                      "Storage access was not granted."
-                    );
-                    return;
-                  }
-
-                  const dirUri = permissions.directoryUri;
-
-                  try {
-                    const fileUri =
-                      await FileSystem.StorageAccessFramework.createFileAsync(
-                        dirUri,
-                        filename,
-                        mimeType
-                      );
-
-                    await FileSystem.writeAsStringAsync(fileUri, base64, {
-                      encoding: FileSystem.EncodingType.Base64,
-                    });
-
-                    console.log("✅ File saved to:", fileUri);
-                    Alert.alert("Backup Saved", "File saved to: " + filename);
-                  } catch (err) {
-                    console.error("❌ Failed to save using SAF:", err);
-                    Alert.alert("Error", "Failed to save file: " + err.message);
-                  }
-                },
-              },
-            ]
-          );
-        }
+        console.log("📦 Processing backup export:", filename);
+        await handleFileDownload(base64, filename, mimeType, false);
       } else if (data.type === "DOWNLOAD_ATTACHMENT") {
         const { dataUrl, filename, mime } = data;
-
-        // pull out base‑64
         const base64 = dataUrl.split(",")[1];
         const mimeType = mime || "application/octet-stream";
 
-        const tempFileUri = FileSystem.cacheDirectory + filename;
-        await FileSystem.writeAsStringAsync(tempFileUri, base64, {
-          encoding: FileSystem.EncodingType.Base64,
-        });
-
-        if (Platform.OS === "ios") {
-          if (await Sharing.isAvailableAsync()) {
-            await Sharing.shareAsync(tempFileUri, { UTI: mimeType });
-          } else {
-            Alert.alert("File Saved", "Attachment saved to: " + tempFileUri);
-          }
-        } else {
-          Alert.alert(
-            "Select Save Location",
-            "📁 Choose a folder (e.g. Downloads) to save your file.",
-            [
-              {
-                text: "Continue",
-                onPress: async () => {
-                  const permissions =
-                    await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
-                  if (!permissions.granted) return;
-
-                  const fileUri =
-                    await FileSystem.StorageAccessFramework.createFileAsync(
-                      permissions.directoryUri,
-                      filename,
-                      mimeType
-                    );
-                  await FileSystem.writeAsStringAsync(fileUri, base64, {
-                    encoding: FileSystem.EncodingType.Base64,
-                  });
-                  Alert.alert("Saved", "File saved to: " + filename);
-                },
-              },
-            ]
-          );
-        }
+        console.log("📥 Processing attachment download:", filename, mimeType);
+        // Use FileViewer for all other file types
+        await handleFileDownload(base64, filename, mimeType);
       } else if (data.type === "launch") {
         const { url } = data;
         console.log("🚀 Launch message received with URL:", url);
@@ -607,12 +697,6 @@ const App: React.FC = () => {
               )
             : "Unavailable"}
         </Text>
-        {/* {updateStatus != "" && (
-          <View>
-            <Text style={styles.infoText}>📦 Update status:</Text>
-            <Text style={styles.noteText}>{updateStatus}</Text>
-          </View>
-        )} */}
       </View>
 
       {notification && (
