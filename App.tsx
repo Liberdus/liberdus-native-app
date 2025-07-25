@@ -1,13 +1,8 @@
 import React, { useEffect, useState } from "react";
 import {
   StyleSheet,
-  Text,
-  View,
-  TouchableOpacity,
   Alert,
   Platform,
-  TextInput,
-  ScrollView,
   SafeAreaView,
   StatusBar,
   KeyboardAvoidingView,
@@ -33,33 +28,6 @@ const APP_URL = "https://liberdus.com/dev";
 // Storage keys
 const DEVICE_TOKEN_KEY = "device_token";
 const APP_URL_KEY = "app_url";
-
-const Network = {
-  main: {
-    name: "Mainnet",
-    url: "https://liberdus.com/app",
-    icon: "🚀",
-    title: "Liberdus Mainnet App",
-  },
-  test: {
-    name: "Testnet",
-    url: "https://liberdus.com/test",
-    icon: "🧪",
-    title: "Liberdus Testnet App",
-  },
-  dev: {
-    name: "Devnet",
-    url: "https://liberdus.com/dev",
-    icon: "🛠",
-    title: "Liberdus Devnet App",
-  },
-  custom: {
-    name: "Custom",
-    url: "",
-    icon: "⚙️",
-    title: "Liberdus Custom App",
-  },
-};
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -133,16 +101,10 @@ const App: React.FC = () => {
   const webViewRef = useRef<WebView>(null);
   const [deviceToken, setDeviceToken] = useState<string | null>(null);
   const [expoPushToken, setExpoPushToken] = useState<string | null>(null);
-  const [notification, setNotification] = useState<
-    Notifications.Notification | undefined
-  >(undefined);
   const [selectedNetwork, setSelectedNetwork] = useState<string>("dev");
-  const [customUrl, setCustomUrl] = useState<string>("");
-  const [showCustomInput, setShowCustomInput] = useState<boolean>(false);
   const [hasLaunchedOnce, setHasLaunchedOnce] = useState(false);
   const [showWebView, setShowWebView] = useState(false);
   const [webViewUrl, setWebViewUrl] = useState<string>("");
-  const [canGoBack, setCanGoBack] = useState(false);
 
   useEffect(() => {
     const subscription = AppState.addEventListener(
@@ -178,30 +140,15 @@ const App: React.FC = () => {
 
       const success = await registerForPushNotificationsAsync();
 
-      const notificationListener =
-        Notifications.addNotificationReceivedListener((notification) => {
-          setNotification(notification);
-        });
-
-      const responseListener =
-        Notifications.addNotificationResponseReceivedListener((response) => {
-          console.log("📱 Notification Response Received:", response);
-        });
-
       console.log("📱 Launched once:", hasLaunchedOnce);
       setTimeout(() => setHasLaunchedOnce(true), 3000);
 
       console.log("Registered for push notifications:", success);
-      return () => {
-        notificationListener.remove();
-        responseListener.remove();
-      };
     })();
   }, []);
 
   useEffect(() => {
     if (hasLaunchedOnce) return;
-    if (!deviceToken || !expoPushToken) return;
     openBrowser();
   }, [deviceToken, expoPushToken, hasLaunchedOnce]);
 
@@ -253,40 +200,14 @@ const App: React.FC = () => {
     }
   };
 
-  const handleNetworkSelect = async (network: string) => {
-    setSelectedNetwork(network);
-    if (network === "custom") {
-      setShowCustomInput(true);
-    } else {
-      setShowCustomInput(false);
-    }
-  };
-
-  const getCurrentUrl = () => {
-    if (selectedNetwork === "custom") {
-      return customUrl;
-    }
-    return Network[selectedNetwork as keyof typeof Network].url;
-  };
-
-  const getCurrentTitle = () => {
-    const network = Network[selectedNetwork as keyof typeof Network];
-    return `${network.icon} ${network.title}`;
-  };
-
   const openBrowser = async () => {
     const url = (await AsyncStorage.getItem(APP_URL_KEY)) || APP_URL;
 
-    if (!deviceToken || !expoPushToken) {
-      console.log(
-        "❌ Missing deviceToken or expoPushToken:",
-        deviceToken,
-        expoPushToken
-      );
-    }
-
     try {
-      const urlWithParams = `${url}?device_token=${deviceToken}&push_token=${expoPushToken}`;
+      const urlWithParams =
+        deviceToken && expoPushToken
+          ? `${url}?device_token=${deviceToken}&push_token=${expoPushToken}`
+          : url;
       setWebViewUrl(urlWithParams);
       setShowWebView(true);
       setHasLaunchedOnce(true);
@@ -298,10 +219,6 @@ const App: React.FC = () => {
         `An error occurred while trying to open the browser: ${reason}`
       );
     }
-  };
-
-  const handleWebViewNavigationStateChange = (navState: any) => {
-    setCanGoBack(navState.canGoBack);
   };
 
   // Simple file handling with download option
@@ -573,7 +490,6 @@ const App: React.FC = () => {
             // nativeConfig={{ props: { webContentsDebuggingEnabled: true } }}
             source={{ uri: webViewUrl }}
             style={styles.webView}
-            onNavigationStateChange={handleWebViewNavigationStateChange}
             allowsInlineMediaPlayback={true} // ✅ Required for <video> on iOS
             mediaPlaybackRequiresUserAction={false} // ✅ Let camera start automatically
             allowsFullscreenVideo
@@ -623,263 +539,15 @@ const App: React.FC = () => {
       </SafeAreaView>
     );
   }
-
-  return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <StatusBar
-        translucent
-        backgroundColor="transparent"
-        barStyle="dark-content" // or "light-content" depending on your UI
-      />
-      <Text style={styles.title}>{getCurrentTitle()}</Text>
-      <Text style={styles.subtitle}>
-        {/* Choose a network and tap Launch App to open the app in your default
-        browser  */}
-        Choose a network and tap Launch App to open the app
-      </Text>
-
-      <Text style={styles.sectionTitle}>Select Network</Text>
-
-      {/* Icon Grid */}
-      <View style={styles.iconGrid}>
-        {Object.entries(Network).map(([key, network]) => (
-          <TouchableOpacity
-            key={key}
-            style={[
-              styles.iconCard,
-              selectedNetwork === key && styles.selectedIconCard,
-            ]}
-            onPress={() => handleNetworkSelect(key)}
-          >
-            <Text style={styles.icon}>{network.icon}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      {showCustomInput && (
-        <View style={styles.customInputContainer}>
-          <Text style={styles.sectionTitle}>Custom URL</Text>
-          <TextInput
-            style={styles.input}
-            value={customUrl}
-            onChangeText={setCustomUrl}
-            placeholder="Enter custom URL (e.g., http://liberdus.com/staging)"
-            placeholderTextColor="#999"
-            autoCapitalize="none"
-            autoCorrect={false}
-            keyboardType="url"
-          />
-        </View>
-      )}
-
-      <TouchableOpacity style={styles.launchButton} onPress={openBrowser}>
-        <Text style={styles.launchButtonText}>Launch App</Text>
-      </TouchableOpacity>
-
-      <View style={styles.infoContainer}>
-        <Text style={styles.infoText}>
-          🌍 Network: {Network[selectedNetwork as keyof typeof Network].name}
-        </Text>
-        <Text style={styles.infoText}>🔗 URL: {getCurrentUrl()}</Text>
-        <Text style={styles.infoText}>
-          📱 Platform: {Platform.OS === "ios" ? "iOS" : "Android"}
-        </Text>
-        <Text style={styles.infoText}>✅ Device token: </Text>
-        <Text style={styles.noteText}>
-          {deviceToken ? deviceToken : "Unavailable"}
-        </Text>
-        <Text style={styles.infoText}>✅ Push token: </Text>
-        <Text style={styles.noteText}>
-          {expoPushToken
-            ? expoPushToken.substring(
-                expoPushToken.indexOf("[") + 1,
-                expoPushToken.indexOf("]")
-              )
-            : "Unavailable"}
-        </Text>
-      </View>
-
-      {notification && (
-        <View style={styles.notificationContainer}>
-          <Text style={styles.notificationTitle}>📩 Notification:</Text>
-          <Text style={styles.notificationText}>
-            {notification.request.content.title}
-          </Text>
-          <Text style={styles.notificationText}>
-            {notification.request.content.body}
-          </Text>
-          <Text style={styles.notificationText}>📌 Data:</Text>
-          {Object.keys(notification.request.content.data).map((key, index) => (
-            <Text key={index} style={styles.notificationText}>
-              {`${key}: ${notification.request.content.data[key]}`}
-            </Text>
-          ))}
-        </View>
-      )}
-    </ScrollView>
-  );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#f5f7fa",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 20,
-  },
   webViewContainer: {
     flex: 1,
     backgroundColor: "#fff",
   },
   webView: {
     flex: 1,
-  },
-  title: {
-    fontSize: 26,
-    fontWeight: "bold",
-    color: "#1a1a1a",
-    marginBottom: 12,
-    textAlign: "center",
-  },
-  subtitle: {
-    fontSize: 16,
-    color: "#666",
-    textAlign: "center",
-    marginBottom: 20,
-    lineHeight: 22,
-    paddingHorizontal: 20,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#333",
-    marginBottom: 16,
-    textAlign: "center",
-  },
-  iconGrid: {
-    width: "100%",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 5,
-    marginBottom: 20,
-  },
-  iconCard: {
-    backgroundColor: "white",
-    borderRadius: 12,
-    width: 70,
-    height: 70,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 2,
-    borderColor: "#e8ecf0",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  selectedIconCard: {
-    borderColor: "#4CAF50",
-    backgroundColor: "#f8fff8",
-    shadowColor: "#4CAF50",
-    shadowOpacity: 0.2,
-    transform: [{ scale: 1.05 }],
-  },
-  icon: {
-    fontSize: 28,
-  },
-  customInputContainer: {
-    width: "100%",
-    maxWidth: 350,
-    marginBottom: 20,
-  },
-  input: {
-    backgroundColor: "white",
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: 16,
-    borderWidth: 1,
-    borderColor: "#ddd",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  launchButton: {
-    backgroundColor: "#4CAF50",
-    paddingHorizontal: 40,
-    paddingVertical: 18,
-    borderRadius: 12,
-    elevation: 3,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    minWidth: 200,
-    marginBottom: 30,
-  },
-  launchButtonText: {
-    color: "white",
-    fontSize: 18,
-    fontWeight: "600",
-    textAlign: "center",
-  },
-  infoContainer: {
-    alignItems: "center",
-    backgroundColor: "white",
-    padding: 20,
-    borderRadius: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-    minWidth: 300,
-  },
-  infoText: {
-    fontSize: 14,
-    color: "#333",
-    marginTop: 8,
-    textAlign: "center",
-  },
-  noteText: {
-    fontSize: 12,
-    color: "#666",
-    fontStyle: "italic",
-    textAlign: "center",
-    marginTop: 4,
-    maxWidth: 250,
-  },
-  notificationContainer: {
-    marginTop: 20,
-    alignItems: "center",
-    backgroundColor: "white",
-    padding: 20,
-    borderRadius: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-    minWidth: 300,
-  },
-  notificationTitle: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#333",
-    textAlign: "center",
-  },
-  notificationText: {
-    fontSize: 12,
-    color: "#666",
-    textAlign: "center",
-    fontStyle: "italic",
-    marginTop: 4,
-    maxWidth: 250,
   },
 });
 
