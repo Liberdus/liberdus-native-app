@@ -22,8 +22,9 @@ import * as FileSystem from "expo-file-system";
 import * as Sharing from "expo-sharing";
 import FileViewer from "react-native-file-viewer";
 import AnimatedSplash from "./SplashScreen";
+import NetInfo from "@react-native-community/netinfo";
 
-const APP_URL = "https://liberdus.com/dev";
+const APP_URL = "https://liberdus.com/test/";
 
 // Storage keys
 const DEVICE_TOKEN_KEY = "device_token";
@@ -101,15 +102,21 @@ const App: React.FC = () => {
   const webViewRef = useRef<WebView>(null);
   const [deviceToken, setDeviceToken] = useState<string | null>(null);
   const [expoPushToken, setExpoPushToken] = useState<string | null>(null);
-  const [selectedNetwork, setSelectedNetwork] = useState<string>("dev");
   const [hasLaunchedOnce, setHasLaunchedOnce] = useState(false);
   const [showWebView, setShowWebView] = useState(false);
   const [webViewUrl, setWebViewUrl] = useState<string>("");
+  // const [isConnected, setIsConnected] = useState<boolean>(true);
 
   useEffect(() => {
     const subscription = AppState.addEventListener(
       "change",
       async (nextAppState) => {
+        console.log(
+          "🔄 App state changed:",
+          appState.current,
+          "to",
+          nextAppState
+        );
         if (
           appState.current.match(/inactive|background/) &&
           nextAppState === "active"
@@ -117,6 +124,12 @@ const App: React.FC = () => {
           // App has come to foreground
           console.log("🔄 App resumed from background");
           await Notifications.setBadgeCountAsync(0);
+
+          // if (appState.current === "background") {
+          //   // Check network connectivity
+          //   const netInfo = await NetInfo.fetch();
+          //   setIsConnected(netInfo.isConnected ?? false);
+          // }
         }
         appState.current = nextAppState;
       }
@@ -130,6 +143,15 @@ const App: React.FC = () => {
     NavigationBar.setBehaviorAsync("overlay-swipe");
   }, []);
 
+  // // Check network connectivity
+  // useEffect(() => {
+  //   const checkConnection = async () => {
+  //     const netInfo = await NetInfo.fetch();
+  //     setIsConnected(netInfo.isConnected ?? false);
+  //   };
+  //   checkConnection();
+  // }, []);
+
   useEffect(() => {
     (async () => {
       await Notifications.setBadgeCountAsync(0);
@@ -141,16 +163,14 @@ const App: React.FC = () => {
       const success = await registerForPushNotificationsAsync();
 
       console.log("📱 Launched once:", hasLaunchedOnce);
-      setTimeout(() => setHasLaunchedOnce(true), 3000);
+      setTimeout(() => {
+        setHasLaunchedOnce(true);
+        openBrowser();
+      }, 1000);
 
       console.log("Registered for push notifications:", success);
     })();
   }, []);
-
-  useEffect(() => {
-    if (hasLaunchedOnce) return;
-    openBrowser();
-  }, [deviceToken, expoPushToken, hasLaunchedOnce]);
 
   const registerForPushNotificationsAsync = async () => {
     try {
@@ -200,7 +220,30 @@ const App: React.FC = () => {
     }
   };
 
+  // const handleRetry = async () => {
+  //   console.log("🔄 Retry button pressed");
+  //   const netInfo = await NetInfo.fetch();
+  //   console.log("📶 Current connection:", netInfo.isConnected);
+
+  //   if (netInfo.isConnected) {
+  //     setIsConnected(true);
+  //   } else {
+  //     Alert.alert(
+  //       "Still No Connection",
+  //       "Please check your internet connection and try again."
+  //     );
+  //   }
+  // };
+
   const openBrowser = async () => {
+    // // Check connectivity before opening browser
+    // const netInfo = await NetInfo.fetch();
+    // console.log("📶 Current connection:", netInfo.isConnected);
+    // if (!netInfo.isConnected) {
+    //   setIsConnected(false);
+    //   return;
+    // }
+
     const url = (await AsyncStorage.getItem(APP_URL_KEY)) || APP_URL;
 
     try {
@@ -399,7 +442,7 @@ const App: React.FC = () => {
     }
   };
 
-  // Main WebView message handler - much simpler now!
+  // Main WebView message handler
   const handleWebViewMessage = async (event) => {
     try {
       const data = JSON.parse(event.nativeEvent.data);
@@ -464,22 +507,33 @@ const App: React.FC = () => {
   };
 
   if (!hasLaunchedOnce) {
+    console.log("🚀 Launching app for the first time");
     return <AnimatedSplash />;
   }
 
+  // // Show no internet screen if not connected
+  // if (!isConnected) {
+  //   console.log("⚠️ No internet connection detected!");
+  //   return (
+  //     <SafeAreaView style={styles.container}>
+  //       <StatusBar hidden={true} />
+  //       <View style={styles.noInternetContainer}>
+  //         <Text style={styles.noInternetTitle}>No Internet Connection</Text>
+  //         <Text style={styles.noInternetMessage}>
+  //           Please check your internet connection and try again.
+  //         </Text>
+  //         <TouchableOpacity style={styles.retryButton} onPress={handleRetry}>
+  //           <Text style={styles.retryButtonText}>Retry</Text>
+  //         </TouchableOpacity>
+  //       </View>
+  //     </SafeAreaView>
+  //   );
+  // }
+
   if (showWebView) {
     return (
-      <SafeAreaView
-        style={{
-          ...styles.webViewContainer,
-          paddingTop: StatusBar.currentHeight,
-        }}
-      >
-        <StatusBar
-          translucent
-          backgroundColor="transparent"
-          barStyle="dark-content" // or "light-content" depending on your UI
-        />
+      <SafeAreaView style={styles.container}>
+        <StatusBar hidden={true} />
         <KeyboardAvoidingView
           style={{ flex: 1 }}
           behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -511,6 +565,11 @@ const App: React.FC = () => {
             startInLoadingState={true}
             // Allow file access
             allowFileAccess={true}
+            // Add caching policy to prevent white screens
+            cacheEnabled={true}
+            cacheMode="LOAD_DEFAULT"
+            // Enable hardware acceleration for Android
+            renderToHardwareTextureAndroid={true}
             onShouldStartLoadWithRequest={(request) => {
               const url = request.url;
               const openInBrowser = isExternalLink(webViewUrl, url);
@@ -534,6 +593,14 @@ const App: React.FC = () => {
             bounces={true}
             // Scroll enabled
             scrollEnabled={true}
+            // Add load end handler to check for white screen
+            onLoadEnd={() => {
+              console.log("✅ WebView load completed");
+            }}
+            // Add load start handler
+            onLoadStart={() => {
+              console.log("🔄 WebView load started");
+            }}
           />
         </KeyboardAvoidingView>
       </SafeAreaView>
@@ -542,13 +609,103 @@ const App: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
-  webViewContainer: {
+  container: {
     flex: 1,
     backgroundColor: "#fff",
   },
   webView: {
     flex: 1,
   },
+  // noInternetContainer: {
+  //   flex: 1,
+  //   justifyContent: "center",
+  //   alignItems: "center",
+  //   padding: 20,
+  //   backgroundColor: "#f5f5f5",
+  // },
+  // noInternetTitle: {
+  //   fontSize: 24,
+  //   fontWeight: "bold",
+  //   color: "#333",
+  //   marginBottom: 16,
+  //   textAlign: "center",
+  // },
+  // noInternetMessage: {
+  //   fontSize: 16,
+  //   color: "#666",
+  //   textAlign: "center",
+  //   marginBottom: 32,
+  //   lineHeight: 24,
+  // },
+  // retryButton: {
+  //   backgroundColor: "#007AFF",
+  //   paddingHorizontal: 32,
+  //   paddingVertical: 12,
+  //   borderRadius: 8,
+  //   elevation: 2,
+  //   shadowColor: "#000",
+  //   shadowOffset: { width: 0, height: 2 },
+  //   shadowOpacity: 0.1,
+  //   shadowRadius: 4,
+  // },
+  // retryButtonText: {
+  //   color: "#fff",
+  //   fontSize: 16,
+  //   fontWeight: "600",
+  // },
+  // whiteScreenOverlay: {
+  //   position: "absolute",
+  //   top: 0,
+  //   left: 0,
+  //   right: 0,
+  //   bottom: 0,
+  //   backgroundColor: "rgba(0, 0, 0, 0.8)",
+  //   justifyContent: "center",
+  //   alignItems: "center",
+  //   zIndex: 1000,
+  // },
+  // whiteScreenContainer: {
+  //   backgroundColor: "#fff",
+  //   padding: 24,
+  //   borderRadius: 12,
+  //   margin: 20,
+  //   alignItems: "center",
+  //   elevation: 5,
+  //   shadowColor: "#000",
+  //   shadowOffset: { width: 0, height: 2 },
+  //   shadowOpacity: 0.25,
+  //   shadowRadius: 6,
+  // },
+  // whiteScreenTitle: {
+  //   fontSize: 20,
+  //   fontWeight: "bold",
+  //   color: "#333",
+  //   marginBottom: 12,
+  //   textAlign: "center",
+  // },
+  // whiteScreenMessage: {
+  //   fontSize: 16,
+  //   color: "#666",
+  //   textAlign: "center",
+  //   marginBottom: 24,
+  //   lineHeight: 22,
+  // },
+  // reloadButton: {
+  //   backgroundColor: "#FF6B35",
+  //   paddingHorizontal: 32,
+  //   paddingVertical: 12,
+  //   borderRadius: 8,
+  //   elevation: 2,
+  //   shadowColor: "#000",
+  //   shadowOffset: { width: 0, height: 2 },
+  //   shadowOpacity: 0.1,
+  //   shadowRadius: 4,
+  // },
+  // reloadButtonText: {
+  //   color: "#fff",
+  //   fontSize: 16,
+  //   fontWeight: "600",
+  // },
 });
 
 export default App;
