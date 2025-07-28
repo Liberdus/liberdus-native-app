@@ -111,6 +111,22 @@ const App: React.FC = () => {
 
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (nextAppState) => {
+      // PROACTIVE: Save state when going to background
+      if (
+        appState.current === "active" &&
+        nextAppState.match(/inactive|background/)
+      ) {
+        console.log("🔄 App going to background - saving state immediately");
+
+        // Send message to webview to save state
+        if (webViewRef.current) {
+          webViewRef.current.postMessage(
+            JSON.stringify({ type: "background" })
+          );
+        }
+      }
+
+      // REACTIVE: Handle app resume
       if (
         appState.current.match(/inactive|background/) &&
         nextAppState === "active"
