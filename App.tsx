@@ -566,7 +566,7 @@ const App: React.FC = () => {
       flex: 1,
       ...(Platform.OS === "android" &&
         isKeyboardVisible && {
-          marginBottom: keyboardHeight + (RNStatusBar.currentHeight || 0),
+          marginBottom: keyboardHeight,
         }),
     };
 
@@ -601,24 +601,29 @@ const App: React.FC = () => {
               allowFileAccess={true}
               cacheEnabled={true}
               cacheMode="LOAD_DEFAULT"
-              webviewDebuggingEnabled={true}
+              // Enable hardware acceleration for Android
               renderToHardwareTextureAndroid={true}
               onShouldStartLoadWithRequest={(request) => {
                 const url = request.url;
                 const openInBrowser = isExternalLink(webViewUrl, url);
                 if (openInBrowser) {
                   Linking.openURL(url);
-                  return false;
+                  return false; // prevent WebView from loading it
                 }
-                return true;
+                return true; // allow normal navigation
               }}
+              // Needed for iOS to make `onShouldStartLoadWithRequest` work
               setSupportMultipleWindows={false}
               onMessage={handleWebViewMessage}
+              // Bounce effect on iOS
               bounces={true}
+              // Scroll enabled
               scrollEnabled={true}
+              // Add load end handler to check for white screen
               onLoadEnd={() => {
                 console.log("✅ WebView load completed");
               }}
+              // Add load start handler
               onLoadStart={() => {
                 console.log("🔄 WebView load started");
               }}
