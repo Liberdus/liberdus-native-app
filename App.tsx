@@ -566,7 +566,7 @@ const App: React.FC = () => {
       flex: 1,
       ...(Platform.OS === "android" &&
         isKeyboardVisible && {
-          marginBottom: keyboardHeight,
+          marginBottom: keyboardHeight + 15,
         }),
     };
 
