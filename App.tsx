@@ -6,6 +6,9 @@ import {
   SafeAreaView,
   KeyboardAvoidingView,
   AlertButton,
+  Keyboard,
+  StatusBar as RNStatusBar,
+  View,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { AppState } from "react-native";
@@ -108,6 +111,8 @@ const App: React.FC = () => {
   const [showWebView, setShowWebView] = useState(false);
   const [webViewUrl, setWebViewUrl] = useState<string>("");
   // const [isConnected, setIsConnected] = useState<boolean>(true);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
 
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (nextAppState) => {
@@ -153,6 +158,32 @@ const App: React.FC = () => {
       subscription.remove();
       if (appResumeTimer.current) clearTimeout(appResumeTimer.current);
     };
+  }, []);
+
+  // Android keyboard handling
+  useEffect(() => {
+    if (Platform.OS === "android") {
+      const keyboardDidShowListener = Keyboard.addListener(
+        "keyboardDidShow",
+        (event) => {
+          setKeyboardHeight(event.endCoordinates.height);
+          setIsKeyboardVisible(true);
+        }
+      );
+
+      const keyboardDidHideListener = Keyboard.addListener(
+        "keyboardDidHide",
+        () => {
+          setKeyboardHeight(0);
+          setIsKeyboardVisible(false);
+        }
+      );
+
+      return () => {
+        keyboardDidShowListener.remove();
+        keyboardDidHideListener.remove();
+      };
+    }
   }, []);
 
   useEffect(() => {
@@ -441,7 +472,7 @@ const App: React.FC = () => {
   };
 
   // Main WebView message handler
-  const handleWebViewMessage = async (event) => {
+  const handleWebViewMessage = async (event: any) => {
     try {
       const data = JSON.parse(event.nativeEvent.data);
 
@@ -531,6 +562,14 @@ const App: React.FC = () => {
   }
 
   if (showWebView) {
+    const webViewContainerStyle = {
+      flex: 1,
+      ...(Platform.OS === "android" &&
+        isKeyboardVisible && {
+          marginBottom: keyboardHeight + (RNStatusBar.currentHeight || 0),
+        }),
+    };
+
     return (
       <SafeAreaView style={styles.container}>
         {/** On Android, this makes Keyboard to cover the input box on focus */}
@@ -540,70 +579,51 @@ const App: React.FC = () => {
           behavior={Platform.OS === "ios" ? "padding" : undefined}
           keyboardVerticalOffset={0}
         >
-          <WebView
-            key={webViewUrl}
-            ref={webViewRef}
-            // nativeConfig={{ props: { webContentsDebuggingEnabled: true } }}
-            source={{ uri: webViewUrl }}
-            style={styles.webView}
-            allowsInlineMediaPlayback={true} // ✅ Required for <video> on iOS
-            mediaPlaybackRequiresUserAction={false} // ✅ Let camera start automatically
-            // allowsFullscreenVideo // On Android, this makes Keyboard to cover the input box on focus
-            useWebView2
-            onError={(syntheticEvent) => {
-              const { nativeEvent } = syntheticEvent;
-              console.error("WebView error: ", nativeEvent);
-              Alert.alert("WebView Error", "Failed to load the page");
-            }}
-            // Enable JavaScript
-            javaScriptEnabled={true}
-            // Enable DOM storage
-            domStorageEnabled={true}
-            // Allow mixed content (HTTP and HTTPS)
-            mixedContentMode="compatibility"
-            // Allow universal access from file URLs
-            allowUniversalAccessFromFileURLs={true}
-            // Start in loading state
-            startInLoadingState={true}
-            // Allow file access
-            allowFileAccess={true}
-            // Add caching policy to prevent white screens
-            cacheEnabled={true}
-            cacheMode="LOAD_DEFAULT"
-            // Enable hardware acceleration for Android
-            renderToHardwareTextureAndroid={true}
-            onShouldStartLoadWithRequest={(request) => {
-              const url = request.url;
-              const openInBrowser = isExternalLink(webViewUrl, url);
-              console.log(
-                "🔗 onShouldStartLoadWithRequest URL:",
-                url,
-                webViewUrl,
-                openInBrowser
-              );
-              if (openInBrowser) {
-                Linking.openURL(url);
-                return false; // prevent WebView from loading it
-              }
-
-              return true; // allow normal navigation
-            }}
-            // Needed for iOS to make `onShouldStartLoadWithRequest` work
-            setSupportMultipleWindows={false}
-            onMessage={handleWebViewMessage}
-            // Bounce effect on iOS
-            bounces={true}
-            // Scroll enabled
-            scrollEnabled={true}
-            // Add load end handler to check for white screen
-            onLoadEnd={() => {
-              console.log("✅ WebView load completed");
-            }}
-            // Add load start handler
-            onLoadStart={() => {
-              console.log("🔄 WebView load started");
-            }}
-          />
+          <View style={webViewContainerStyle}>
+            <WebView
+              key={webViewUrl}
+              ref={webViewRef}
+              source={{ uri: webViewUrl }}
+              style={styles.webView}
+              allowsInlineMediaPlayback={true}
+              mediaPlaybackRequiresUserAction={false}
+              useWebView2
+              onError={(syntheticEvent) => {
+                const { nativeEvent } = syntheticEvent;
+                console.error("WebView error: ", nativeEvent);
+                Alert.alert("WebView Error", "Failed to load the page");
+              }}
+              javaScriptEnabled={true}
+              domStorageEnabled={true}
+              mixedContentMode="compatibility"
+              allowUniversalAccessFromFileURLs={true}
+              startInLoadingState={true}
+              allowFileAccess={true}
+              cacheEnabled={true}
+              cacheMode="LOAD_DEFAULT"
+              webviewDebuggingEnabled={true}
+              renderToHardwareTextureAndroid={true}
+              onShouldStartLoadWithRequest={(request) => {
+                const url = request.url;
+                const openInBrowser = isExternalLink(webViewUrl, url);
+                if (openInBrowser) {
+                  Linking.openURL(url);
+                  return false;
+                }
+                return true;
+              }}
+              setSupportMultipleWindows={false}
+              onMessage={handleWebViewMessage}
+              bounces={true}
+              scrollEnabled={true}
+              onLoadEnd={() => {
+                console.log("✅ WebView load completed");
+              }}
+              onLoadStart={() => {
+                console.log("🔄 WebView load started");
+              }}
+            />
+          </View>
         </KeyboardAvoidingView>
       </SafeAreaView>
     );
