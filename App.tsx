@@ -583,22 +583,31 @@ const App: React.FC = () => {
             <WebView
               key={webViewUrl}
               ref={webViewRef}
+              // nativeConfig={{ props: { webContentsDebuggingEnabled: true } }}
               source={{ uri: webViewUrl }}
               style={styles.webView}
-              allowsInlineMediaPlayback={true}
-              mediaPlaybackRequiresUserAction={false}
+              allowsInlineMediaPlayback={true} // ✅ Required for <video> on iOS
+              mediaPlaybackRequiresUserAction={false} // ✅ Let camera start automatically
+              // allowsFullscreenVideo // On Android, this makes Keyboard to cover the input box on focus
               useWebView2
               onError={(syntheticEvent) => {
                 const { nativeEvent } = syntheticEvent;
                 console.error("WebView error: ", nativeEvent);
                 Alert.alert("WebView Error", "Failed to load the page");
               }}
+              // Enable JavaScript
               javaScriptEnabled={true}
+              // Enable DOM storage
               domStorageEnabled={true}
+              // Allow mixed content (HTTP and HTTPS)
               mixedContentMode="compatibility"
+              // Allow universal access from file URLs
               allowUniversalAccessFromFileURLs={true}
+              // Start in loading state
               startInLoadingState={true}
+              // Allow file access
               allowFileAccess={true}
+              // Add caching policy to prevent white screens
               cacheEnabled={true}
               cacheMode="LOAD_DEFAULT"
               // Enable hardware acceleration for Android
@@ -606,6 +615,12 @@ const App: React.FC = () => {
               onShouldStartLoadWithRequest={(request) => {
                 const url = request.url;
                 const openInBrowser = isExternalLink(webViewUrl, url);
+                console.log(
+                  "🔗 onShouldStartLoadWithRequest URL:",
+                  url,
+                  webViewUrl,
+                  openInBrowser
+                );
                 if (openInBrowser) {
                   Linking.openURL(url);
                   return false; // prevent WebView from loading it
