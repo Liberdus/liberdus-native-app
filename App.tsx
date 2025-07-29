@@ -4,10 +4,10 @@ import {
   Alert,
   Platform,
   SafeAreaView,
-  StatusBar,
   KeyboardAvoidingView,
   AlertButton,
 } from "react-native";
+import { StatusBar } from "expo-status-bar";
 import { AppState } from "react-native";
 import { useRef } from "react";
 import * as Linking from "expo-linking";
@@ -534,13 +534,14 @@ const App: React.FC = () => {
     return (
       <SafeAreaView style={styles.container}>
         {/** On Android, this makes Keyboard to cover the input box on focus */}
-        {/* <StatusBar hidden={true} /> */}
+        <StatusBar hidden={true} />
         <KeyboardAvoidingView
           style={{ flex: 1 }}
           behavior={Platform.OS === "ios" ? "padding" : undefined}
           keyboardVerticalOffset={0}
         >
           <WebView
+            key={webViewUrl}
             ref={webViewRef}
             // nativeConfig={{ props: { webContentsDebuggingEnabled: true } }}
             source={{ uri: webViewUrl }}
