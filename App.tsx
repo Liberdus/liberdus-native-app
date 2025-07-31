@@ -128,11 +128,7 @@ const App: React.FC = () => {
         console.log("🔄 App going to background - saving state immediately");
 
         // Send message to webview to save state
-        if (webViewRef.current) {
-          webViewRef.current.postMessage(
-            JSON.stringify({ type: "background" })
-          );
-        }
+        sendMessageToWebView({ type: "background" });
       }
 
       // REACTIVE: Handle app resume
@@ -164,43 +160,19 @@ const App: React.FC = () => {
     };
   }, []);
 
-  // Android keyboard handling with smart detection
+  // Android keyboard handling - by communicating with webview
   useEffect(() => {
     if (Platform.OS === "android") {
       const keyboardDidShowListener = Keyboard.addListener(
         "keyboardDidShow",
         (event) => {
-          setKeyboardHeight(event.endCoordinates.height);
+          const keyboardHeight = event.endCoordinates.height;
+          setKeyboardHeight(keyboardHeight);
           setIsKeyboardVisible(true);
-
-          // Check input position after system adjusts
+          console.log("⌨️ Keyboard shown, height:", keyboardHeight);
           if (hasCapturedInitialHeight) {
             setTimeout(() => {
-              if (webViewRef.current) {
-                webViewRef.current.injectJavaScript(`
-                  (function() {
-                    try {
-                      const keyboardHeight = ${event.endCoordinates.height};
-                      const keyboardTopPosition = window.screen.height - keyboardHeight;
-                      const focusedInput = document.activeElement;
-                      
-                      if (focusedInput && (focusedInput.tagName === 'INPUT' || focusedInput.tagName === 'TEXTAREA' || focusedInput.contentEditable === 'true')) {
-                        const rect = focusedInput.getBoundingClientRect();
-                        const inputIsAboveKeyboard = rect.bottom < keyboardTopPosition;
-                        const needsManualHandling = !inputIsAboveKeyboard;
-                        
-                        window.ReactNativeWebView.postMessage(JSON.stringify({
-                          type: 'KEYBOARD_DETECTION',
-                          needsManualHandling: needsManualHandling
-                        }));
-                      }
-                    } catch (error) {
-                      console.warn('Keyboard detection error:', error);
-                    }
-                  })();
-                  true;
-                `);
-              }
+              sendMessageToWebView({ type: "KEYBOARD_SHOWN", keyboardHeight });
             }, 100); // Increased timeout for better reliability
           } else {
             console.log(
@@ -216,6 +188,7 @@ const App: React.FC = () => {
           setKeyboardHeight(0);
           setIsKeyboardVisible(false);
           setNeedsManualKeyboardHandling(false);
+          console.log("⌨️ Keyboard hidden");
         }
       );
 
@@ -232,6 +205,16 @@ const App: React.FC = () => {
     })();
   }, []);
 
+  const sendMessageToWebView = (message: object) => {
+    const messageJson = JSON.stringify(message);
+    if (webViewRef.current) {
+      const jsToInject = `window.dispatchEvent(new MessageEvent('message', { data: ${JSON.stringify(
+        messageJson
+      )} }));`;
+      webViewRef.current.injectJavaScript(jsToInject);
+    }
+  };
+
   const hideNavBar = async () => {
     try {
       await NavigationBar.setVisibilityAsync("hidden");
@@ -244,6 +227,7 @@ const App: React.FC = () => {
 
   useEffect(() => {
     (async () => {
+      // await AsyncStorage.removeItem(APP_URL_KEY);
       await Notifications.setBadgeCountAsync(0);
       await registerNotificationChannels();
       const token = await getOrCreateDeviceToken();
@@ -693,29 +677,9 @@ const App: React.FC = () => {
               bounces={true}
               // Scroll enabled
               scrollEnabled={true}
-              // Add load end handler to check for white screen
+              // Add load end handler
               onLoadEnd={() => {
                 console.log("✅ WebView load completed");
-
-                // Capture initial viewport height for keyboard detection
-                if (
-                  Platform.OS === "android" &&
-                  webViewRef.current &&
-                  !hasCapturedInitialHeight
-                ) {
-                  // Add timeout to ensure DOM is fully ready
-                  setTimeout(() => {
-                    if (webViewRef.current) {
-                      webViewRef.current.injectJavaScript(`
-                        window.ReactNativeWebView.postMessage(JSON.stringify({
-                          type: 'VIEWPORT_HEIGHT',
-                          height: window.innerHeight
-                        }));
-                        true;
-                      `);
-                    }
-                  }, 1000); // Wait 1000ms for DOM to be fully ready
-                }
               }}
               // Add load start handler
               onLoadStart={() => {
