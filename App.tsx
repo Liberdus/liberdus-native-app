@@ -390,6 +390,17 @@ const App: React.FC = () => {
           return;
         }
 
+        if (
+          permissions.directoryUri.includes("raw%3A") ||
+          permissions.directoryUri.includes("msd%3A")
+        ) {
+          Alert.alert(
+            "Can't Use This Folder",
+            "Please select a folder from the internal storage in the file manager, such as 'Downloads/Liberdus'."
+          );
+          return;
+        }
+
         const fileUri = await FileSystem.StorageAccessFramework.createFileAsync(
           permissions.directoryUri,
           filename,
