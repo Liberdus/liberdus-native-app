@@ -256,6 +256,7 @@ const App: React.FC = () => {
         sendMessageToWebView({
           type: "NOTIFICATION_TAPPED",
           to: data.to,
+          from: data.from,
         });
       });
   
