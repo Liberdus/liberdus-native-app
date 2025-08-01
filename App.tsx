@@ -252,6 +252,26 @@ const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    // Listen for notification response (when user taps notification)
+    const notificationResponseListener =
+      Notifications.addNotificationResponseReceivedListener((response) => {
+        const { notification } = response;
+        const { data } = notification.request.content;
+  
+        console.log("👆 Notification tapped:", { data });
+  
+        sendMessageToWebView({
+          type: "NOTIFICATION_TAPPED",
+          to: data.to,
+        });
+      });
+  
+    return () => {
+      notificationResponseListener.remove();
+    };
+  }, []);
+
+  useEffect(() => {
     console.log("📱 Launched once:", hasLaunchedOnce);
     openBrowser();
   }, [hasLaunchedOnce]);
