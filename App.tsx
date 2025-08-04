@@ -149,6 +149,8 @@ const App: React.FC = () => {
         const runAppResume = async () => {
           console.log("📱 Running app resume logic");
           await Notifications.setBadgeCountAsync(0);
+          // Send message to webview about app foreground
+          sendMessageToWebView({ type: "foreground" });
           hideNavBar();
           // Check if web app is in white screen
           runWhiteScreenCheck();
@@ -257,16 +259,16 @@ const App: React.FC = () => {
       Notifications.addNotificationResponseReceivedListener((response) => {
         const { notification } = response;
         const { data } = notification.request.content;
-  
+
         console.log("👆 Notification tapped:", { data });
-  
+
         sendMessageToWebView({
           type: "NOTIFICATION_TAPPED",
           to: data.to,
           from: data.from,
         });
       });
-  
+
     return () => {
       notificationResponseListener.remove();
     };
@@ -294,7 +296,10 @@ const App: React.FC = () => {
       }
 
       if (finalStatus !== "granted") {
-        Alert.alert("User disabled notifications", "To enable notifications, please accept notification permissions for this application.");
+        Alert.alert(
+          "User disabled notifications",
+          "To enable notifications, please accept notification permissions for this application."
+        );
         return false;
       }
 
