@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { checkVersion } from "react-native-check-version";
 import {
   StyleSheet,
   Alert,
@@ -33,6 +34,13 @@ const DEVICE_TOKEN_KEY = "device_token";
 const APP_URL_KEY = "app_url";
 
 const APP_RESUME_DELAY_MS = 1500; // 1.5 second delay before checking for app resume
+
+interface INITIAL_APP_PARAMS {
+  type: string;
+  appVersion: string;
+  deviceToken?: string;
+  expoPushToken?: string;
+}
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -301,11 +309,7 @@ const App: React.FC = () => {
     const url = (await AsyncStorage.getItem(APP_URL_KEY)) || APP_URL;
 
     try {
-      const urlWithParams =
-        deviceToken && expoPushToken
-          ? `${url}?device_token=${deviceToken}&push_token=${expoPushToken}`
-          : url;
-      setWebViewUrl(urlWithParams);
+      setWebViewUrl(url);
       setShowWebView(true);
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
@@ -541,15 +545,8 @@ const App: React.FC = () => {
 
         // Add a small delay to ensure the web view is properly closed before opening new one
         setTimeout(() => {
-          // Add device and push tokens to the new URL if they exist
-          let newUrl = url;
-          if (deviceToken && expoPushToken) {
-            const separator = url.includes("?") ? "&" : "?";
-            newUrl = `${url}${separator}device_token=${deviceToken}&push_token=${expoPushToken}`;
-          }
-
-          console.log("🔗 Opening new URL in WebView:", newUrl);
-          setWebViewUrl(newUrl);
+          console.log("🔗 Opening new URL in WebView:", url);
+          setWebViewUrl(url);
           setShowWebView(true);
         }, 100);
       } else if (data.type === "WHITE_SCREEN_DETECTED") {
@@ -689,8 +686,21 @@ const App: React.FC = () => {
               // Scroll enabled
               scrollEnabled={true}
               // Add load end handler
-              onLoadEnd={() => {
+              onLoadEnd={async () => {
                 console.log("✅ WebView load completed");
+                const versionData = await checkVersion();
+                console.log("📡 Received app version:", versionData);
+                const version = versionData?.version || "unknown";
+                const payload: INITIAL_APP_PARAMS = {
+                  type: "INITIAL_APP_PARAMS",
+                  appVersion: version,
+                };
+                if (deviceToken && expoPushToken) {
+                  payload.deviceToken = deviceToken;
+                  payload.expoPushToken = expoPushToken;
+                }
+                console.log("🚀 Initial app parameters:", payload);
+                sendMessageToWebView(payload);
               }}
               // Add load start handler
               onLoadStart={() => {
