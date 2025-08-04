@@ -266,7 +266,7 @@ const App: React.FC = () => {
       }
 
       if (finalStatus !== "granted") {
-        Alert.alert("Permission denied", "Failed to get push token");
+        Alert.alert("User disabled notifications", "To enable notifications, please accept notification permissions for this application.");
         return false;
       }
 
