@@ -36,7 +36,6 @@ const APP_URL_KEY = "app_url";
 const APP_RESUME_DELAY_MS = 1500; // 1.5 second delay before checking for app resume
 
 interface INITIAL_APP_PARAMS {
-  type: string;
   appVersion: string;
   deviceToken?: string;
   expoPushToken?: string;
@@ -691,16 +690,18 @@ const App: React.FC = () => {
                 const versionData = await checkVersion();
                 console.log("📡 Received app version:", versionData);
                 const version = versionData?.version || "unknown";
-                const payload: INITIAL_APP_PARAMS = {
-                  type: "INITIAL_APP_PARAMS",
+                const data: INITIAL_APP_PARAMS = {
                   appVersion: version,
                 };
                 if (deviceToken && expoPushToken) {
-                  payload.deviceToken = deviceToken;
-                  payload.expoPushToken = expoPushToken;
+                  data.deviceToken = deviceToken;
+                  data.expoPushToken = expoPushToken;
                 }
-                console.log("🚀 Initial app parameters:", payload);
-                sendMessageToWebView(payload);
+                console.log("🚀 Initial app parameters:", data);
+                sendMessageToWebView({
+                  type: "INITIAL_APP_PARAMS",
+                  data,
+                });
               }}
               // Add load start handler
               onLoadStart={() => {
