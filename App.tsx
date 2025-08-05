@@ -8,7 +8,6 @@ import {
   KeyboardAvoidingView,
   AlertButton,
   Keyboard,
-  StatusBar as RNStatusBar,
   View,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
@@ -124,6 +123,7 @@ const App: React.FC = () => {
     useState(false);
   const [hasCapturedInitialHeight, setHasCapturedInitialHeight] =
     useState(false);
+  const [showNavBar, setShowNavBar] = useState(true); // Show navigation bar on app launch
 
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (nextAppState) => {
@@ -151,7 +151,7 @@ const App: React.FC = () => {
           await Notifications.setBadgeCountAsync(0);
           // Send message to webview about app foreground
           sendMessageToWebView({ type: "foreground" });
-          hideNavBar();
+          toggleNavBar(showNavBar);
           // Check if web app is in white screen
           runWhiteScreenCheck();
         };
@@ -208,12 +208,6 @@ const App: React.FC = () => {
     }
   }, [hasCapturedInitialHeight]);
 
-  useEffect(() => {
-    (async () => {
-      await hideNavBar();
-    })();
-  }, []);
-
   const sendMessageToWebView = (message: object) => {
     const messageJson = JSON.stringify(message);
     if (webViewRef.current) {
@@ -224,9 +218,13 @@ const App: React.FC = () => {
     }
   };
 
-  const hideNavBar = async () => {
+  const toggleNavBar = async (visible: boolean) => {
     try {
-      await NavigationBar.setVisibilityAsync("hidden");
+      if (visible) {
+        await NavigationBar.setVisibilityAsync("visible");
+      } else {
+        await NavigationBar.setVisibilityAsync("hidden");
+      }
       await NavigationBar.setBehaviorAsync("overlay-swipe");
       await NavigationBar.setPositionAsync("absolute");
     } catch (error) {
@@ -238,6 +236,7 @@ const App: React.FC = () => {
     (async () => {
       // await AsyncStorage.removeItem(APP_URL_KEY);
       await Notifications.setBadgeCountAsync(0);
+      await toggleNavBar(showNavBar); // Show navigation bar on app launch
       await registerNotificationChannels();
       const token = await getOrCreateDeviceToken();
       console.log("📱 Device Token:", token);
@@ -586,6 +585,10 @@ const App: React.FC = () => {
           setHasCapturedInitialHeight(true);
           console.log("📏 Initial viewport height captured:", data.height);
         }
+      } else if (data.type === "NAV_BAR") {
+        console.log("🔌 Received navigation bar update:", data);
+        setShowNavBar(data.visible);
+        await toggleNavBar(data.visible);
       } else {
         console.error("❌ Unexpected message received:", data);
       }
@@ -648,7 +651,6 @@ const App: React.FC = () => {
 
     return (
       <SafeAreaView style={styles.container}>
-        {/** On Android, this makes Keyboard to cover the input box on focus */}
         <StatusBar hidden={true} />
         <KeyboardAvoidingView
           style={{ flex: 1 }}
