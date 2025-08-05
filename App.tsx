@@ -149,6 +149,10 @@ const App: React.FC = () => {
         const runAppResume = async () => {
           console.log("📱 Running app resume logic");
           await Notifications.setBadgeCountAsync(0);
+
+          // Check for presented notifications when app comes to foreground
+          await checkAndSendPresentedNotifications();
+
           // Send message to webview about app foreground
           sendMessageToWebView({ type: "foreground" });
           toggleNavBar(showNavBarRef.current);
@@ -218,6 +222,58 @@ const App: React.FC = () => {
     }
   };
 
+  // Add this new function to check for all presented notifications
+  const checkAndSendPresentedNotifications = async (
+    excludeTappedId?: string
+  ) => {
+    try {
+      const presentedNotifications =
+        await Notifications.getPresentedNotificationsAsync();
+
+      console.log(
+        "📱 Found presented notifications:",
+        presentedNotifications.length
+      );
+
+      if (presentedNotifications.length > 0) {
+        // Filter out the tapped notification if provided
+        const filteredNotifications = excludeTappedId
+          ? presentedNotifications.filter(
+              (n) => n.request.identifier !== excludeTappedId
+            )
+          : presentedNotifications;
+
+        if (filteredNotifications.length > 0) {
+          const notificationsData = filteredNotifications.map(
+            (notification) => {
+              const { data } = notification.request.content;
+              return {
+                id: notification.request.identifier,
+                title: notification.request.content.title,
+                body: notification.request.content.body,
+                data: data, // This contains your to, from, and other custom data
+                date: new Date(notification.date).toISOString(),
+              };
+            }
+          );
+
+          console.log(
+            "📋 Sending presented notifications to WebView:",
+            notificationsData
+          );
+
+          // Send all notifications to WebView
+          sendMessageToWebView({
+            type: "ALL_NOTIFICATIONS_PRESENTED",
+            notifications: notificationsData,
+          });
+        }
+      }
+    } catch (error) {
+      console.error("❌ Failed to check presented notifications:", error);
+    }
+  };
+
   const toggleNavBar = async (visible: boolean) => {
     try {
       if (visible) {
@@ -244,6 +300,9 @@ const App: React.FC = () => {
 
       const success = await registerForPushNotificationsAsync();
 
+      // Check for presented notifications on app start
+      await checkAndSendPresentedNotifications();
+
       setTimeout(() => {
         setHasLaunchedOnce(true);
       }, 1000);
@@ -261,6 +320,7 @@ const App: React.FC = () => {
 
         console.log("👆 Notification tapped:", { data });
 
+        // Send the tapped notification immediately
         setTimeout(() => {
           sendMessageToWebView({
             type: "NOTIFICATION_TAPPED",
@@ -268,6 +328,11 @@ const App: React.FC = () => {
             from: data.from,
           });
         }, 2000);
+
+        // Check for other notifications, excluding the tapped one
+        setTimeout(() => {
+          checkAndSendPresentedNotifications(notification.request.identifier);
+        }, 2500);
       });
 
     return () => {
