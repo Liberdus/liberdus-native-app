@@ -111,6 +111,7 @@ const App: React.FC = () => {
   const appState = useRef(AppState.currentState);
   const appResumeTimer = useRef<NodeJS.Timeout | null>(null);
   const webViewRef = useRef<WebView>(null);
+  const showNavBarRef = useRef(true); // Show navigation bar on app launch
   const [deviceToken, setDeviceToken] = useState<string | null>(null);
   const [expoPushToken, setExpoPushToken] = useState<string | null>(null);
   const [hasLaunchedOnce, setHasLaunchedOnce] = useState(false);
@@ -123,7 +124,6 @@ const App: React.FC = () => {
     useState(false);
   const [hasCapturedInitialHeight, setHasCapturedInitialHeight] =
     useState(false);
-  const [showNavBar, setShowNavBar] = useState(true); // Show navigation bar on app launch
 
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (nextAppState) => {
@@ -151,7 +151,7 @@ const App: React.FC = () => {
           await Notifications.setBadgeCountAsync(0);
           // Send message to webview about app foreground
           sendMessageToWebView({ type: "foreground" });
-          toggleNavBar(showNavBar);
+          toggleNavBar(showNavBarRef.current);
           // Check if web app is in white screen
           runWhiteScreenCheck();
         };
@@ -236,7 +236,7 @@ const App: React.FC = () => {
     (async () => {
       // await AsyncStorage.removeItem(APP_URL_KEY);
       await Notifications.setBadgeCountAsync(0);
-      await toggleNavBar(showNavBar); // Show navigation bar on app launch
+      await toggleNavBar(showNavBarRef.current);
       await registerNotificationChannels();
       const token = await getOrCreateDeviceToken();
       console.log("📱 Device Token:", token);
@@ -261,11 +261,13 @@ const App: React.FC = () => {
 
         console.log("👆 Notification tapped:", { data });
 
-        sendMessageToWebView({
-          type: "NOTIFICATION_TAPPED",
-          to: data.to,
-          from: data.from,
-        });
+        setTimeout(() => {
+          sendMessageToWebView({
+            type: "NOTIFICATION_TAPPED",
+            to: data.to,
+            from: data.from,
+          });
+        }, 2000);
       });
 
     return () => {
@@ -534,6 +536,29 @@ const App: React.FC = () => {
     }
   };
 
+  //   const injectedJavaScript = `
+  //   (function() {
+  //     const sendLog = (level, args) => {
+  //       try {
+  //         window.ReactNativeWebView.postMessage(JSON.stringify({
+  //           type: 'WEB_LOG',
+  //           level: level,
+  //           message: Array.from(args).join(' ')
+  //         }));
+  //       } catch (err) {}
+  //     };
+
+  //     ['log', 'warn', 'error', 'info', 'debug'].forEach((level) => {
+  //       const original = console[level];
+  //       console[level] = function(...args) {
+  //         original.apply(console, args);
+  //         sendLog(level, args);
+  //       };
+  //     });
+  //   })();
+  //   true;
+  // `;
+
   // Main WebView message handler
   const handleWebViewMessage = async (event: any) => {
     try {
@@ -541,6 +566,14 @@ const App: React.FC = () => {
 
       // console.log("📡 Received message:", data);
 
+      // type LogLevel = "log" | "warn" | "error" | "info" | "debug";
+
+      // if (data.type === "WEB_LOG") {
+      //   const logLevel = data.level.toUpperCase() as LogLevel;
+      //   const logFn = console[logLevel] || console.log;
+      //   logFn(`[WebView ${logLevel}]`, data.message);
+      //   return;
+      // }
       if (data.type === "EXPORT_BACKUP") {
         const { dataUrl, filename } = data;
         const base64 = dataUrl.split(",")[1];
@@ -587,7 +620,7 @@ const App: React.FC = () => {
         }
       } else if (data.type === "NAV_BAR") {
         console.log("🔌 Received navigation bar update:", data);
-        setShowNavBar(data.visible);
+        showNavBarRef.current = data.visible;
         await toggleNavBar(data.visible);
       } else {
         console.error("❌ Unexpected message received:", data);
@@ -707,6 +740,7 @@ const App: React.FC = () => {
               }}
               // Needed for iOS to make `onShouldStartLoadWithRequest` work
               setSupportMultipleWindows={false}
+              // injectedJavaScript={injectedJavaScript} //
               onMessage={handleWebViewMessage}
               // Bounce effect on iOS
               bounces={true}
@@ -715,11 +749,10 @@ const App: React.FC = () => {
               // Add load end handler
               onLoadEnd={async () => {
                 console.log("✅ WebView load completed");
-                const versionData = await checkVersion();
-                console.log("📡 Received app version:", versionData);
-                const version = versionData?.version || "unknown";
+                const appVersion = Constants.expoConfig?.version || "unknown";
+                console.log("App Version:", appVersion);
                 const data: INITIAL_APP_PARAMS = {
-                  appVersion: version,
+                  appVersion,
                 };
                 if (deviceToken && expoPushToken) {
                   data.deviceToken = deviceToken;
