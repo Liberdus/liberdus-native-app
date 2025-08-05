@@ -759,10 +759,12 @@ const App: React.FC = () => {
                   data.expoPushToken = expoPushToken;
                 }
                 console.log("🚀 Initial app parameters:", data);
+                setTimeout(() => {
                 sendMessageToWebView({
-                  type: "INITIAL_APP_PARAMS",
-                  data,
-                });
+                    type: "INITIAL_APP_PARAMS",
+                    data,
+                  });
+                }, 200);
               }}
               // Add load start handler
               onLoadStart={() => {
