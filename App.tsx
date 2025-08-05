@@ -8,10 +8,14 @@ import {
   KeyboardAvoidingView,
   AlertButton,
   Keyboard,
-  StatusBar as RNStatusBar,
   View,
 } from "react-native";
-import { StatusBar } from "expo-status-bar";
+import {
+  setStatusBarBackgroundColor,
+  setStatusBarHidden,
+  setStatusBarStyle,
+  setStatusBarTranslucent,
+} from "expo-status-bar";
 import { AppState } from "react-native";
 import { useRef } from "react";
 import * as Linking from "expo-linking";
@@ -234,10 +238,26 @@ const App: React.FC = () => {
     }
   };
 
+  const toggleStatusBar = async (visible: boolean) => {
+    try {
+      if (visible) {
+        setStatusBarHidden(false);
+        setStatusBarTranslucent(true);
+        setStatusBarStyle("auto");
+        setStatusBarBackgroundColor("transparent");
+      } else {
+        setStatusBarHidden(true);
+      }
+    } catch (error) {
+      console.warn("⚠️ Failed to toggle status bar:", error);
+    }
+  };
+
   useEffect(() => {
     (async () => {
       // await AsyncStorage.removeItem(APP_URL_KEY);
       await Notifications.setBadgeCountAsync(0);
+      toggleStatusBar(true); // Show status bar on app launch
       await registerNotificationChannels();
       const token = await getOrCreateDeviceToken();
       console.log("📱 Device Token:", token);
@@ -586,6 +606,9 @@ const App: React.FC = () => {
           setHasCapturedInitialHeight(true);
           console.log("📏 Initial viewport height captured:", data.height);
         }
+      } else if (data.type === "STATUS_BAR") {
+        console.log("🔌 Received status bar update:", data);
+        toggleStatusBar(data.visible);
       } else {
         console.error("❌ Unexpected message received:", data);
       }
@@ -649,7 +672,6 @@ const App: React.FC = () => {
     return (
       <SafeAreaView style={styles.container}>
         {/** On Android, this makes Keyboard to cover the input box on focus */}
-        <StatusBar hidden={true} />
         <KeyboardAvoidingView
           style={{ flex: 1 }}
           behavior={Platform.OS === "ios" ? "padding" : undefined}
