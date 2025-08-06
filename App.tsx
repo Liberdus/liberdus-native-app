@@ -148,7 +148,6 @@ const App: React.FC = () => {
 
         const runAppResume = async () => {
           console.log("📱 Running app resume logic");
-          await Notifications.setBadgeCountAsync(0);
           // Send message to webview about app foreground
           sendMessageToWebView({ type: "foreground" });
           toggleNavBar(showNavBarRef.current);
@@ -235,7 +234,6 @@ const App: React.FC = () => {
   useEffect(() => {
     (async () => {
       // await AsyncStorage.removeItem(APP_URL_KEY);
-      await Notifications.setBadgeCountAsync(0);
       await toggleNavBar(showNavBarRef.current);
       await registerNotificationChannels();
       const token = await getOrCreateDeviceToken();
@@ -622,6 +620,10 @@ const App: React.FC = () => {
         console.log("🔌 Received navigation bar update:", data);
         showNavBarRef.current = data.visible;
         await toggleNavBar(data.visible);
+      } else if (data.type === "CLEAR_NOTI") {
+        console.log("🗑️ Received clear notifications message");
+        await Notifications.setBadgeCountAsync(0);
+        await Notifications.dismissAllNotificationsAsync();
       } else {
         console.error("❌ Unexpected message received:", data);
       }
