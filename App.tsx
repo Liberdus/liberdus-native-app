@@ -125,6 +125,12 @@ const App: React.FC = () => {
   const [hasCapturedInitialHeight, setHasCapturedInitialHeight] =
     useState(false);
 
+  // Add state for caching notifications and clicks
+  const [cachedNotifications, setCachedNotifications] = useState<any[]>([]);
+  const [cachedNotificationClicks, setCachedNotificationClicks] = useState<
+    any[]
+  >([]);
+
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (nextAppState) => {
       // PROACTIVE: Save state when going to background
@@ -150,8 +156,8 @@ const App: React.FC = () => {
           console.log("📱 Running app resume logic");
           await Notifications.setBadgeCountAsync(0);
 
-          // Check for presented notifications when app comes to foreground
-          await checkAndSendPresentedNotifications();
+          // Cache notifications when app comes to foreground (don't send to WebView yet)
+          await cacheNotifications();
 
           // Send message to webview about app foreground
           sendMessageToWebView({ type: "foreground" });
@@ -222,57 +228,98 @@ const App: React.FC = () => {
     }
   };
 
-  // Add this new function to check for all presented notifications
-  const checkAndSendPresentedNotifications = async (
-    excludeTappedId?: string
+  // Helper function to check for duplicates
+  const hasDuplicates = (
+    newItems: any[],
+    existingItems: any[],
+    key: string
   ) => {
+    const existingIds = new Set(existingItems.map((item) => item[key]));
+    return newItems.some((item) => existingIds.has(item[key]));
+  };
+
+  // Function to cache notifications (don't send to WebView immediately)
+  const cacheNotifications = async () => {
     try {
       const presentedNotifications =
         await Notifications.getPresentedNotificationsAsync();
-
       console.log(
         "📱 Found presented notifications:",
         presentedNotifications.length
       );
 
-      if (presentedNotifications.length > 0) {
-        // Filter out the tapped notification if provided
-        const filteredNotifications = excludeTappedId
-          ? presentedNotifications.filter(
-              (n) => n.request.identifier !== excludeTappedId
-            )
-          : presentedNotifications;
+      const notificationsData = presentedNotifications.map((notification) => ({
+        id: notification.request.identifier,
+        title: notification.request.content.title,
+        body: notification.request.content.body,
+        data: notification.request.content.data,
+        date: new Date(notification.date).toISOString(),
+      }));
 
-        if (filteredNotifications.length > 0) {
-          const notificationsData = filteredNotifications.map(
-            (notification) => {
-              const { data } = notification.request.content;
-              return {
-                id: notification.request.identifier,
-                title: notification.request.content.title,
-                body: notification.request.content.body,
-                data: data, // This contains your to, from, and other custom data
-                date: new Date(notification.date).toISOString(),
-              };
-            }
-          );
-
-          console.log(
-            "📋 Sending presented notifications to WebView:",
-            notificationsData
-          );
-
-          // Send all notifications to WebView
-          sendMessageToWebView({
-            type: "ALL_NOTIFICATIONS_PRESENTED",
-            notifications: notificationsData,
-          });
+      setCachedNotifications((prev) => {
+        if (hasDuplicates(notificationsData, prev, "id")) {
+          console.log("📋 No new notifications to cache (duplicates found)");
+          return prev;
         }
-      }
+        console.log("📋 Caching new notifications:", notificationsData);
+        return notificationsData;
+      });
     } catch (error) {
-      console.error("❌ Failed to check presented notifications:", error);
+      console.error("❌ Failed to cache notifications:", error);
     }
   };
+
+  // Function to cache notification click (don't send to WebView immediately)
+  const cacheNotificationClick = (notification: any) => {
+    const clickData = {
+      id: notification.request.identifier,
+      to: notification.request.content.data.to,
+      from: notification.request.content.data.from,
+      timestamp: new Date().toISOString(),
+    };
+
+    setCachedNotificationClicks((prev) => {
+      if (hasDuplicates([clickData], prev, "id")) {
+        console.log("👆 Click already cached (duplicate):", clickData.id);
+        return prev;
+      }
+      console.log("👆 Cached notification click:", clickData);
+      return [...prev, clickData];
+    });
+  };
+
+  // Generic function to send and clear cached data
+  const sendAndClearCache = (
+    data: any[],
+    type: string,
+    setter: (data: any[]) => void
+  ) => {
+    if (data.length > 0) {
+      sendMessageToWebView({
+        type,
+        [type === "ALL_NOTIFICATIONS_PRESENTED" ? "notifications" : "clicks"]:
+          data,
+      });
+      setter([]);
+      console.log(`📋 Sent and cleared ${type} cache`);
+    }
+  };
+
+  // Function to send cached notifications to WebView
+  const sendCachedNotifications = () =>
+    sendAndClearCache(
+      cachedNotifications,
+      "ALL_NOTIFICATIONS_PRESENTED",
+      setCachedNotifications
+    );
+
+  // Function to send cached notification clicks to WebView
+  const sendCachedNotificationClicks = () =>
+    sendAndClearCache(
+      cachedNotificationClicks,
+      "NOTIFICATION_CLICKS",
+      setCachedNotificationClicks
+    );
 
   const toggleNavBar = async (visible: boolean) => {
     try {
@@ -300,8 +347,8 @@ const App: React.FC = () => {
 
       const success = await registerForPushNotificationsAsync();
 
-      // Check for presented notifications on app start
-      await checkAndSendPresentedNotifications();
+      // Cache notifications on app start (don't send to WebView yet)
+      await cacheNotifications();
 
       setTimeout(() => {
         setHasLaunchedOnce(true);
@@ -320,19 +367,8 @@ const App: React.FC = () => {
 
         console.log("👆 Notification tapped:", { data });
 
-        // Send the tapped notification immediately
-        setTimeout(() => {
-          sendMessageToWebView({
-            type: "NOTIFICATION_TAPPED",
-            to: data.to,
-            from: data.from,
-          });
-        }, 2000);
-
-        // Check for other notifications, excluding the tapped one
-        setTimeout(() => {
-          checkAndSendPresentedNotifications(notification.request.identifier);
-        }, 2500);
+        // Cache the notification click (don't send to WebView yet)
+        cacheNotificationClick(notification);
       });
 
     return () => {
@@ -631,6 +667,23 @@ const App: React.FC = () => {
 
       // console.log("📡 Received message:", data);
 
+      // Handle notification requests
+      if (data.type === "GetAllPanelNotifications") {
+        console.log("📋 WebView requested all panel notifications");
+        setTimeout(() => {
+          sendCachedNotifications();
+        }, 300);
+        return;
+      }
+
+      if (data.type === "GetNotificationClicks") {
+        console.log("👆 WebView requested notification clicks");
+        setTimeout(() => {
+          sendCachedNotificationClicks();
+        }, 300);
+        return;
+      }
+
       // type LogLevel = "log" | "warn" | "error" | "info" | "debug";
 
       // if (data.type === "WEB_LOG") {
@@ -825,7 +878,7 @@ const App: React.FC = () => {
                 }
                 console.log("🚀 Initial app parameters:", data);
                 setTimeout(() => {
-                sendMessageToWebView({
+                  sendMessageToWebView({
                     type: "INITIAL_APP_PARAMS",
                     data,
                   });
