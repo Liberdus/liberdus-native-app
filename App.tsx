@@ -267,7 +267,7 @@ const App: React.FC = () => {
             to: data.to,
             from: data.from,
           });
-        }, 2000);
+        }, 200);
       });
 
     return () => {
@@ -760,7 +760,7 @@ const App: React.FC = () => {
                 }
                 console.log("🚀 Initial app parameters:", data);
                 setTimeout(() => {
-                sendMessageToWebView({
+                  sendMessageToWebView({
                     type: "INITIAL_APP_PARAMS",
                     data,
                   });
