@@ -217,6 +217,33 @@ const App: React.FC = () => {
     }
   };
 
+  /**
+   * Get all notifications and return them
+   * @returns Array of notifications in the panel
+   */
+  const getPanelNotifications = async () => {
+    try {
+      const presentedNotifications =
+        await Notifications.getPresentedNotificationsAsync();
+      console.log(
+        "📱 Found presented notifications:",
+        presentedNotifications.length
+      );
+
+      const notificationsData = presentedNotifications.map((notification) => ({
+        id: notification.request.identifier,
+        title: notification.request.content.title,
+        body: notification.request.content.body,
+        data: notification.request.content.data,
+        date: new Date(notification.date).toISOString(),
+      }));
+
+      return notificationsData;
+    } catch (error) {
+      console.error("❌ Failed to get all panel notifications:", error);
+    }
+  };
+
   const toggleNavBar = async (visible: boolean) => {
     try {
       if (visible) {
@@ -265,7 +292,7 @@ const App: React.FC = () => {
             to: data.to,
             from: data.from,
           });
-        }, 200);
+        }, 300);
       });
 
     return () => {
@@ -563,6 +590,17 @@ const App: React.FC = () => {
       const data = JSON.parse(event.nativeEvent.data);
 
       // console.log("📡 Received message:", data);
+
+      // Handle notification requests from webview
+      if (data.type === "GetAllPanelNotifications") {
+        console.log("📋 WebView requested all panel notifications");
+        const notifications = await getPanelNotifications();
+        sendMessageToWebView({
+          type: "ALL_NOTIFICATIONS_IN_PANEL",
+          notifications,
+        });
+        return;
+      }
 
       // type LogLevel = "log" | "warn" | "error" | "info" | "debug";
 
