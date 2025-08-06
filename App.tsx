@@ -294,7 +294,7 @@ const App: React.FC = () => {
             to: data.to,
             from: data.from,
           });
-        }, 2000);
+        }, 300);
       });
 
     return () => {
