@@ -125,12 +125,6 @@ const App: React.FC = () => {
   const [hasCapturedInitialHeight, setHasCapturedInitialHeight] =
     useState(false);
 
-  // Add state for caching notifications and clicks
-  const [cachedNotifications, setCachedNotifications] = useState<any[]>([]);
-  const [cachedNotificationClicks, setCachedNotificationClicks] = useState<
-    any[]
-  >([]);
-
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (nextAppState) => {
       // PROACTIVE: Save state when going to background
@@ -155,10 +149,6 @@ const App: React.FC = () => {
         const runAppResume = async () => {
           console.log("📱 Running app resume logic");
           await Notifications.setBadgeCountAsync(0);
-
-          // Cache notifications when app comes to foreground (don't send to WebView yet)
-          await cacheNotifications();
-
           // Send message to webview about app foreground
           sendMessageToWebView({ type: "foreground" });
           toggleNavBar(showNavBarRef.current);
@@ -228,18 +218,11 @@ const App: React.FC = () => {
     }
   };
 
-  // Helper function to check for duplicates
-  const hasDuplicates = (
-    newItems: any[],
-    existingItems: any[],
-    key: string
-  ) => {
-    const existingIds = new Set(existingItems.map((item) => item[key]));
-    return newItems.some((item) => existingIds.has(item[key]));
-  };
-
-  // Function to cache notifications (don't send to WebView immediately)
-  const cacheNotifications = async () => {
+  /**
+   * Get all notifications and return them
+   * @returns Array of notifications in the panel
+   */
+  const getPanelNotifications = async () => {
     try {
       const presentedNotifications =
         await Notifications.getPresentedNotificationsAsync();
@@ -256,70 +239,11 @@ const App: React.FC = () => {
         date: new Date(notification.date).toISOString(),
       }));
 
-      setCachedNotifications((prev) => {
-        if (hasDuplicates(notificationsData, prev, "id")) {
-          console.log("📋 No new notifications to cache (duplicates found)");
-          return prev;
-        }
-        console.log("📋 Caching new notifications:", notificationsData);
-        return notificationsData;
-      });
+      return notificationsData;
     } catch (error) {
-      console.error("❌ Failed to cache notifications:", error);
+      console.error("❌ Failed to get all panel notifications:", error);
     }
   };
-
-  // Function to cache notification click (don't send to WebView immediately)
-  const cacheNotificationClick = (notification: any) => {
-    const clickData = {
-      id: notification.request.identifier,
-      to: notification.request.content.data.to,
-      from: notification.request.content.data.from,
-      timestamp: new Date().toISOString(),
-    };
-
-    setCachedNotificationClicks((prev) => {
-      if (hasDuplicates([clickData], prev, "id")) {
-        console.log("👆 Click already cached (duplicate):", clickData.id);
-        return prev;
-      }
-      console.log("👆 Cached notification click:", clickData);
-      return [...prev, clickData];
-    });
-  };
-
-  // Generic function to send and clear cached data
-  const sendAndClearCache = (
-    data: any[],
-    type: string,
-    setter: (data: any[]) => void
-  ) => {
-    if (data.length > 0) {
-      sendMessageToWebView({
-        type,
-        [type === "ALL_NOTIFICATIONS_PRESENTED" ? "notifications" : "clicks"]:
-          data,
-      });
-      setter([]);
-      console.log(`📋 Sent and cleared ${type} cache`);
-    }
-  };
-
-  // Function to send cached notifications to WebView
-  const sendCachedNotifications = () =>
-    sendAndClearCache(
-      cachedNotifications,
-      "ALL_NOTIFICATIONS_PRESENTED",
-      setCachedNotifications
-    );
-
-  // Function to send cached notification clicks to WebView
-  const sendCachedNotificationClicks = () =>
-    sendAndClearCache(
-      cachedNotificationClicks,
-      "NOTIFICATION_CLICKS",
-      setCachedNotificationClicks
-    );
 
   const toggleNavBar = async (visible: boolean) => {
     try {
@@ -347,9 +271,6 @@ const App: React.FC = () => {
 
       const success = await registerForPushNotificationsAsync();
 
-      // Cache notifications on app start (don't send to WebView yet)
-      await cacheNotifications();
-
       setTimeout(() => {
         setHasLaunchedOnce(true);
       }, 1000);
@@ -367,8 +288,13 @@ const App: React.FC = () => {
 
         console.log("👆 Notification tapped:", { data });
 
-        // Cache the notification click (don't send to WebView yet)
-        cacheNotificationClick(notification);
+        setTimeout(() => {
+          sendMessageToWebView({
+            type: "NOTIFICATION_TAPPED",
+            to: data.to,
+            from: data.from,
+          });
+        }, 2000);
       });
 
     return () => {
@@ -667,20 +593,14 @@ const App: React.FC = () => {
 
       // console.log("📡 Received message:", data);
 
-      // Handle notification requests
+      // Handle notification requests from webview
       if (data.type === "GetAllPanelNotifications") {
         console.log("📋 WebView requested all panel notifications");
-        setTimeout(() => {
-          sendCachedNotifications();
-        }, 300);
-        return;
-      }
-
-      if (data.type === "GetNotificationClicks") {
-        console.log("👆 WebView requested notification clicks");
-        setTimeout(() => {
-          sendCachedNotificationClicks();
-        }, 300);
+        const notifications = await getPanelNotifications();
+        sendMessageToWebView({
+          type: "ALL_NOTIFICATIONS_IN_PANEL",
+          notifications,
+        });
         return;
       }
 
