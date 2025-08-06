@@ -34,7 +34,7 @@ const APP_URL_KEY = "app_url";
 
 const APP_RESUME_DELAY_MS = 1500; // 1.5 second delay before checking for app resume
 
-interface INITIAL_APP_PARAMS {
+interface APP_PARAMS {
   appVersion: string;
   deviceToken?: string;
   expoPushToken?: string;
@@ -624,6 +624,20 @@ const App: React.FC = () => {
         console.log("🗑️ Received clear notifications message");
         await Notifications.setBadgeCountAsync(0);
         await Notifications.dismissAllNotificationsAsync();
+      } else if (data.type === "APP_PARAMS") {
+        const appVersion = Constants.expoConfig?.version || "unknown";
+        const data: APP_PARAMS = {
+          appVersion,
+        };
+        if (deviceToken && expoPushToken) {
+          data.deviceToken = deviceToken;
+          data.expoPushToken = expoPushToken;
+        }
+        console.log("🚀 App parameters:", data);
+        sendMessageToWebView({
+          type: "APP_PARAMS",
+          data,
+        });
       } else {
         console.error("❌ Unexpected message received:", data);
       }
@@ -751,22 +765,6 @@ const App: React.FC = () => {
               // Add load end handler
               onLoadEnd={async () => {
                 console.log("✅ WebView load completed");
-                const appVersion = Constants.expoConfig?.version || "unknown";
-                console.log("App Version:", appVersion);
-                const data: INITIAL_APP_PARAMS = {
-                  appVersion,
-                };
-                if (deviceToken && expoPushToken) {
-                  data.deviceToken = deviceToken;
-                  data.expoPushToken = expoPushToken;
-                }
-                console.log("🚀 Initial app parameters:", data);
-                setTimeout(() => {
-                  sendMessageToWebView({
-                    type: "INITIAL_APP_PARAMS",
-                    data,
-                  });
-                }, 200);
               }}
               // Add load start handler
               onLoadStart={() => {
