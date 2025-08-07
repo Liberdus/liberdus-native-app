@@ -230,11 +230,12 @@ const App: React.FC = () => {
         presentedNotifications.length
       );
 
+      console.log("📱 Notification data:", JSON.stringify(presentedNotifications));
+
       const notificationsData = presentedNotifications.map((notification) => ({
         id: notification.request.identifier,
-        title: notification.request.content.title,
-        body: notification.request.content.body,
-        data: notification.request.content.data,
+        to: notification.request.content.data?.to,
+        from: notification.request.content.data?.from,
         date: new Date(notification.date).toISOString(),
       }));
 
