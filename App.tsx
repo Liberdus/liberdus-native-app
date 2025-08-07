@@ -278,6 +278,16 @@ const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    // Listen for notifications when app is in foreground
+    const notificationReceivedListener =
+      Notifications.addNotificationReceivedListener((notification) => {
+        const { data } = notification.request.content;
+        console.log("👆 Notification received:", { data });
+        sendMessageToWebView({
+          type: "NEW_NOTIFICATION",
+        });
+      });
+
     // Listen for notification response (when user taps notification)
     const notificationResponseListener =
       Notifications.addNotificationResponseReceivedListener((response) => {
@@ -296,6 +306,7 @@ const App: React.FC = () => {
       });
 
     return () => {
+      notificationReceivedListener.remove();
       notificationResponseListener.remove();
     };
   }, []);
