@@ -2,7 +2,7 @@
   "expo": {
     "name": "Liberdus",
     "slug": "liberdus",
-    "version": "2025.0806.1012",
+    "version": "2025.0814.0941",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -11,11 +11,11 @@
     ],
     "ios": {
       "buildNumber": "6",
-      "supportsTablet": true,
+      "supportsTablet": false,
       "bundleIdentifier": "com.jairaj.liberdus",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-        "NSCameraUsageDescription": "This app uses the camera to capture photos or videos."
+        "NSCameraUsageDescription": "Camera access is required to scan receiver address QR codes within the app."
       }
     },
     "android": {
