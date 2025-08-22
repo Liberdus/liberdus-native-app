@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from "react";
-import { checkVersion } from "react-native-check-version";
 import {
   StyleSheet,
   Alert,
@@ -25,8 +24,10 @@ import * as FileSystem from "expo-file-system";
 import * as Sharing from "expo-sharing";
 import FileViewer from "react-native-file-viewer";
 import AnimatedSplash from "./SplashScreen";
+import CallKeepService from "./CallKeepService";
+import { DeviceEventEmitter } from "react-native";
 
-const APP_URL = "https://liberdus.com/test/";
+const APP_URL = "https://liberdus.com/dev/";
 
 // Storage keys
 const DEVICE_TOKEN_KEY = "device_token";
@@ -38,6 +39,15 @@ interface APP_PARAMS {
   appVersion: string;
   deviceToken?: string;
   expoPushToken?: string;
+  voipPushToken?: string;
+}
+
+interface CallData {
+  callerName?: string;
+  callerImage?: string;
+  from?: string;
+  to?: string;
+  notificationData?: any;
 }
 
 Notifications.setNotificationHandler({
@@ -58,6 +68,7 @@ async function registerNotificationChannels() {
     sound: "default",
     vibrationPattern: [0, 250, 250, 250],
     lightColor: "#FF231F7C",
+    showBadge: true,
   });
 
   await Notifications.setNotificationChannelAsync("alerts", {
@@ -66,6 +77,37 @@ async function registerNotificationChannels() {
     sound: "default",
     vibrationPattern: [0, 500, 500, 500],
     lightColor: "#FF0000",
+    lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+    bypassDnd: true,
+    showBadge: true,
+  });
+
+  // Enhanced calls channel for maximum priority
+  await Notifications.setNotificationChannelAsync("calls", {
+    name: "Incoming Calls",
+    importance: Notifications.AndroidImportance.MAX,
+    sound: "default",
+    vibrationPattern: [0, 1000, 500, 1000],
+    lightColor: "#00FF00",
+    lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+    bypassDnd: true,
+    showBadge: true,
+    enableLights: true,
+    enableVibrate: true,
+  });
+
+  // High priority call notifications for when CallKeep isn't available
+  await Notifications.setNotificationChannelAsync("call-priority", {
+    name: "Priority Call Notifications",
+    importance: Notifications.AndroidImportance.MAX,
+    sound: "default",
+    vibrationPattern: [0, 1000, 500, 1000, 500, 1000],
+    lightColor: "#00FFFF",
+    lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+    bypassDnd: true,
+    showBadge: true,
+    enableLights: true,
+    enableVibrate: true,
   });
 
   await Notifications.setNotificationChannelAsync("background", {
@@ -74,6 +116,7 @@ async function registerNotificationChannels() {
     sound: "",
     vibrationPattern: [],
     lightColor: "#999999",
+    showBadge: false,
   });
 }
 
@@ -114,16 +157,19 @@ const App: React.FC = () => {
   const showNavBarRef = useRef(true); // Show navigation bar on app launch
   const [deviceToken, setDeviceToken] = useState<string | null>(null);
   const [expoPushToken, setExpoPushToken] = useState<string | null>(null);
+  const [voipPushToken, setVoipPushToken] = useState<string | null>(null);
   const [hasLaunchedOnce, setHasLaunchedOnce] = useState(false);
   const [showWebView, setShowWebView] = useState(false);
   const [webViewUrl, setWebViewUrl] = useState<string>("");
-  // const [isConnected, setIsConnected] = useState<boolean>(true);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
   const [needsManualKeyboardHandling, setNeedsManualKeyboardHandling] =
     useState(false);
   const [hasCapturedInitialHeight, setHasCapturedInitialHeight] =
     useState(false);
+
+  const [currentCallData, setCurrentCallData] = useState<CallData | null>(null);
+  const [activeCallUUID, setActiveCallUUID] = useState<string | null>(null);
 
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (nextAppState) => {
@@ -263,6 +309,39 @@ const App: React.FC = () => {
       // await AsyncStorage.removeItem(APP_URL_KEY);
       await toggleNavBar(showNavBarRef.current);
       await registerNotificationChannels();
+
+      // Initialize CallKeep
+      try {
+        await CallKeepService.setup();
+        console.log("✅ CallKeep initialized successfully");
+
+        // Get VoIP push token if on iOS
+        if (Platform.OS === "ios") {
+          try {
+            // Add a delay to ensure CallKeep setup is complete
+            setTimeout(async () => {
+              try {
+                const voipToken = await CallKeepService.getVoIPPushToken();
+                setVoipPushToken(voipToken);
+                console.log("📱 VoIP Push Token:", voipToken);
+              } catch (error) {
+                console.warn(
+                  "⚠️ Could not get VoIP push token, continuing without it:",
+                  error
+                );
+              }
+            }, 1000);
+          } catch (error) {
+            console.warn(
+              "⚠️ VoIP token setup failed, continuing without it:",
+              error
+            );
+          }
+        }
+      } catch (error) {
+        console.error("❌ CallKeep initialization failed:", error);
+      }
+
       const token = await getOrCreateDeviceToken();
       console.log("📱 Device Token:", token);
       setDeviceToken(token);
@@ -310,6 +389,114 @@ const App: React.FC = () => {
       notificationResponseListener.remove();
     };
   }, []);
+
+  // // Enhanced CallKeep and high priority messaging integration
+  // useEffect(() => {
+  //   console.log("🔄 Setting up enhanced CallKeep event listeners");
+
+  //   // Listen for VoIP token updates
+  //   const voipTokenListener = DeviceEventEmitter.addListener(
+  //     "voipTokenReceived",
+  //     (token: string) => {
+  //       console.log("📱 VoIP token received via event:", token);
+  //       setVoipPushToken(token);
+  //       // Send updated tokens to server
+  //       sendAppParams();
+  //     }
+  //   );
+
+  //   // Listen for incoming VoIP calls
+  //   const incomingVoipCallListener = DeviceEventEmitter.addListener(
+  //     "incomingVoIPCall",
+  //     (callData: any) => {
+  //       console.log("📞 Incoming VoIP call event:", callData);
+
+  //       const callInfo: CallData = {
+  //         callerName: callData.callerName,
+  //         from: callData.callerName,
+  //         notificationData: callData.notification,
+  //       };
+
+  //       setActiveCallUUID(callData.callUUID);
+  //       setCurrentCallData(callInfo);
+
+  //       // Wake up the app if needed
+  //       if (callData.appState !== "active") {
+  //         console.log("🚀 App not active, waking up for VoIP call");
+  //       }
+  //     }
+  //   );
+
+  //   // Listen for background call handling
+  //   const backgroundCallListener = DeviceEventEmitter.addListener(
+  //     "backgroundCallReceived",
+  //     (callData: any) => {
+  //       console.log("📞 Background call received:", callData);
+  //       // Prepare call data for when app becomes active
+  //       setCurrentCallData({
+  //         callerName: callData.callerName,
+  //         from: callData.callerName,
+  //         notificationData: callData.notification,
+  //       });
+  //     }
+  //   );
+
+  //   // Listen for CallKeep events
+  //   const callAnsweredListener = DeviceEventEmitter.addListener(
+  //     "callAnswered",
+  //     (data: any) => {
+  //       console.log("✅ Call answered via CallKeep:", data.callUUID);
+  //       setActiveCallUUID(data.callUUID);
+  //     }
+  //   );
+
+  //   const callEndedListener = DeviceEventEmitter.addListener(
+  //     "callEnded",
+  //     (data: any) => {
+  //       console.log("❌ Call ended via CallKeep:", data.callUUID);
+  //       setActiveCallUUID(null);
+  //       setCurrentCallData(null);
+  //       CallKeepService.clearCurrentCall();
+  //     }
+  //   );
+
+  //   const callDisplayedListener = DeviceEventEmitter.addListener(
+  //     "callDisplayed",
+  //     (data: any) => {
+  //       console.log("📱 Call displayed via CallKeep:", data.callUUID);
+  //       setActiveCallUUID(data.callUUID);
+  //     }
+  //   );
+
+  //   return () => {
+  //     voipTokenListener.remove();
+  //     incomingVoipCallListener.remove();
+  //     backgroundCallListener.remove();
+  //     callAnsweredListener.remove();
+  //     callEndedListener.remove();
+  //     callDisplayedListener.remove();
+  //   };
+  // }, []);
+
+  // // High priority data message handler for FCM
+  // useEffect(() => {
+  //   const handleDataMessage = (remoteMessage: any) => {
+  //     console.log("📱 High priority data message received:", remoteMessage);
+
+  //     // Process with CallKeep service
+  //     if (remoteMessage.data) {
+  //       CallKeepService.sendHighPriorityDataMessage(remoteMessage.data);
+  //     }
+  //   };
+
+  //   // Note: This would be set up with FCM messaging
+  //   // messaging().onMessage(handleDataMessage);
+  //   // messaging().setBackgroundMessageHandler(handleDataMessage);
+
+  //   return () => {
+  //     // Cleanup if needed
+  //   };
+  // }, []);
 
   useEffect(() => {
     console.log("📱 Launched once:", hasLaunchedOnce);
@@ -678,9 +865,14 @@ const App: React.FC = () => {
         const data: APP_PARAMS = {
           appVersion,
         };
-        if (deviceToken && expoPushToken) {
+        if (deviceToken && (expoPushToken || voipPushToken)) {
           data.deviceToken = deviceToken;
-          data.expoPushToken = expoPushToken;
+          if (expoPushToken) {
+            data.expoPushToken = expoPushToken;
+          }
+          if (voipPushToken) {
+            data.voipPushToken = voipPushToken;
+          }
         }
         console.log("🚀 App parameters:", data);
         sendMessageToWebView({
