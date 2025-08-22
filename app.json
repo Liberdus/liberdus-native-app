@@ -16,7 +16,22 @@
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSCameraUsageDescription": "Camera access is needed to scan QR codes and capture photos or videos to share in messages.",
-        "NSMicrophoneUsageDescription": "Microphone access is needed to record audio for videos you share in messages."
+        "NSMicrophoneUsageDescription": "Microphone access is needed to record audio for videos you share in messages.",
+        "UIBackgroundModes": [
+          "audio",
+          "voip",
+          "background-processing",
+          "background-fetch",
+          "remote-notification"
+        ],
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": true
+        },
+        "com.apple.CallKit.CallsDirectory": true,
+        "BGTaskSchedulerPermittedIdentifiers": [
+          "com.jairaj.liberdus.voip-notification",
+          "com.jairaj.liberdus.background-processing"
+        ]
       }
     },
     "android": {
@@ -29,9 +44,23 @@
       "permissions": [
         "android.permission.INTERNET",
         "android.permission.VIBRATE",
-        "android.permission.CAMERA"
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.WAKE_LOCK",
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.USE_FULL_SCREEN_INTENT",
+        "android.permission.MANAGE_OWN_CALLS",
+        "com.android.voicemail.permission.ADD_VOICEMAIL",
+        "android.permission.CALL_PHONE",
+        "android.permission.READ_PHONE_STATE",
+        "android.permission.DISABLE_KEYGUARD",
+        "android.permission.TURN_SCREEN_ON",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.POST_NOTIFICATIONS"
       ],
-      "googleServicesFile": "./google-services.json"
+      "googleServicesFile": "./google-services.json",
+      "enableBackgroundNotification": true,
+      "usesCleartextTraffic": true
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -49,7 +78,14 @@
       "enabled": false
     },
     "plugins": [
-      "expo-notifications"
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#ffffff",
+          "defaultChannel": "calls"
+        }
+      ]
     ]
   }
 }
