@@ -26,6 +26,9 @@ import FileViewer from "react-native-file-viewer";
 import AnimatedSplash from "./SplashScreen";
 import CallKeepService from "./CallKeepService";
 import { DeviceEventEmitter } from "react-native";
+import messaging, {
+  FirebaseMessagingTypes,
+} from "@react-native-firebase/messaging";
 
 const APP_URL = "https://liberdus.com/dev/";
 
@@ -49,6 +52,25 @@ interface CallData {
   to?: string;
   notificationData?: any;
 }
+
+// Background message handler for Firebase (when app is killed or backgrounded)
+messaging().setBackgroundMessageHandler(
+  async (remoteMessage: FirebaseMessagingTypes.RemoteMessage) => {
+    console.log("📱 FCM background message received:", remoteMessage);
+
+    // Handle high priority data messages for calls
+    if (remoteMessage.data) {
+      try {
+        // Import CallKeepService dynamically to avoid circular dependencies
+        const CallKeepService = require("./CallKeepService").default;
+        await CallKeepService.sendHighPriorityDataMessage(remoteMessage.data);
+      } catch (error) {
+        console.error("❌ Error processing background message:", error);
+        // Fallback: just log the error and continue
+      }
+    }
+  }
+);
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -194,6 +216,38 @@ const App: React.FC = () => {
 
         const runAppResume = async () => {
           console.log("📱 Running app resume logic");
+
+          // Process any pending call first
+          if (pendingCall) {
+            try {
+              console.log(
+                "🚀 Processing pending call on app resume:",
+                pendingCall
+              );
+
+              // Initialize CallKeep if needed
+              await CallKeepService.setup();
+
+              // Now trigger the incoming call
+              CallKeepService.displayIncomingCall(
+                pendingCall.callerName,
+                pendingCall.callUUID
+              );
+
+              console.log(
+                "✅ Successfully processed pending call on app resume"
+              );
+
+              // Clear the pending call
+              setPendingCall(null);
+            } catch (error) {
+              console.error(
+                "❌ Failed to process pending call on app resume:",
+                error
+              );
+            }
+          }
+
           // Send message to webview about app foreground
           sendMessageToWebView({ type: "foreground" });
           toggleNavBar(showNavBarRef.current);
@@ -478,30 +532,159 @@ const App: React.FC = () => {
   //   };
   // }, []);
 
-  // // High priority data message handler for FCM
-  // useEffect(() => {
-  //   const handleDataMessage = (remoteMessage: any) => {
-  //     console.log("📱 High priority data message received:", remoteMessage);
+  // Firebase messaging handler for Android
+  useEffect(() => {
+    if (Platform.OS === "android") {
+      console.log("🔥 Setting up Firebase messaging for Android");
 
-  //     // Process with CallKeep service
-  //     if (remoteMessage.data) {
-  //       CallKeepService.sendHighPriorityDataMessage(remoteMessage.data);
-  //     }
-  //   };
+      // Request permission for Android notifications
+      const requestPermission = async () => {
+        const authStatus = await messaging().requestPermission();
+        const enabled =
+          authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
+          authStatus === messaging.AuthorizationStatus.PROVISIONAL;
 
-  //   // Note: This would be set up with FCM messaging
-  //   // messaging().onMessage(handleDataMessage);
-  //   // messaging().setBackgroundMessageHandler(handleDataMessage);
+        if (enabled) {
+          console.log("📱 Firebase messaging permission granted:", authStatus);
+          // Get FCM token
+          try {
+            const fcmToken = await messaging().getToken();
+            console.log("🔑 FCM Token:", fcmToken);
+            // You can store this token to send to your server
+          } catch (error) {
+            console.error("❌ Error getting FCM token:", error);
+          }
+        }
+      };
 
-  //   return () => {
-  //     // Cleanup if needed
-  //   };
-  // }, []);
+      requestPermission();
+
+      // Handle foreground messages
+      const unsubscribeForeground = messaging().onMessage(
+        async (remoteMessage: FirebaseMessagingTypes.RemoteMessage) => {
+          console.log("📱 FCM message received in foreground:", remoteMessage);
+
+          // Handle high priority data messages for calls
+          if (remoteMessage.data) {
+            try {
+              await CallKeepService.sendHighPriorityDataMessage(
+                remoteMessage.data
+              );
+            } catch (error) {
+              console.error("❌ Error processing foreground message:", error);
+            }
+          }
+        }
+      );
+
+      // Handle background messages (when app is backgrounded but not killed)
+      messaging().onNotificationOpenedApp(
+        (remoteMessage: FirebaseMessagingTypes.RemoteMessage) => {
+          console.log(
+            "📱 FCM message opened app from background:",
+            remoteMessage
+          );
+
+          if (remoteMessage.data) {
+            CallKeepService.sendHighPriorityDataMessage(
+              remoteMessage.data
+            ).catch((error) => {
+              console.error("❌ Error processing opened app message:", error);
+            });
+          }
+        }
+      );
+
+      // Handle messages when app is completely killed and opened by notification
+      messaging()
+        .getInitialNotification()
+        .then((remoteMessage: FirebaseMessagingTypes.RemoteMessage | null) => {
+          if (remoteMessage) {
+            console.log(
+              "📱 FCM message opened app from killed state:",
+              remoteMessage
+            );
+
+            if (remoteMessage.data) {
+              CallKeepService.sendHighPriorityDataMessage(
+                remoteMessage.data
+              ).catch((error) => {
+                console.error(
+                  "❌ Error processing killed state message:",
+                  error
+                );
+              });
+            }
+          }
+        });
+
+      return unsubscribeForeground;
+    }
+  }, []);
 
   useEffect(() => {
     console.log("📱 Launched once:", hasLaunchedOnce);
     openBrowser();
   }, [hasLaunchedOnce]);
+
+  // Handle deferred CallKeep setup for Android
+  const [pendingCall, setPendingCall] = useState<{
+    callUUID: string;
+    callerName: string;
+    platform: string;
+    data: any;
+    timestamp: number;
+  } | null>(null);
+
+  useEffect(() => {
+    const handleIncomingCallPending = (eventData: {
+      callUUID: string;
+      callerName: string;
+      platform: string;
+      data: any;
+      timestamp: number;
+    }) => {
+      console.log(
+        "📞 Storing deferred incoming call for app state change:",
+        eventData
+      );
+      setPendingCall(eventData);
+    };
+
+    const handleBringAppToForeground = (eventData: {
+      callUUID: string;
+      reason: string;
+      timestamp: number;
+    }) => {
+      console.log("🚀 Bring app to foreground requested:", eventData);
+
+      // For Android, try to prevent app from going to background
+      if (Platform.OS === "android") {
+        // Force a WebView interaction to keep app active
+        setTimeout(() => {
+          console.log("📱 Preventing Android app from going to background");
+          sendMessageToWebView({
+            type: "keepActive",
+            reason: eventData.reason,
+          });
+        }, 200);
+      }
+    };
+
+    const pendingCallSubscription = DeviceEventEmitter.addListener(
+      "incomingCallPending",
+      handleIncomingCallPending
+    );
+    const foregroundSubscription = DeviceEventEmitter.addListener(
+      "bringAppToForeground",
+      handleBringAppToForeground
+    );
+
+    return () => {
+      pendingCallSubscription.remove();
+      foregroundSubscription.remove();
+    };
+  }, []);
 
   const registerForPushNotificationsAsync = async () => {
     try {

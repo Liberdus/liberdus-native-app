@@ -85,6 +85,15 @@
           "color": "#ffffff",
           "defaultChannel": "calls"
         }
+      ],
+      [
+        "@config-plugins/react-native-callkeep",
+        {
+          "appName": "Liberdus",
+          "supportsVideo": false,
+          "includesCallsInRecents": true,
+          "imageName": "icon"
+        }
       ]
     ]
   }
