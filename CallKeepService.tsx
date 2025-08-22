@@ -2,7 +2,6 @@ import RNCallKeep from "react-native-callkeep";
 import { Platform, AppState, DeviceEventEmitter } from "react-native";
 import uuid from "react-native-uuid";
 import VoipPushNotification from "react-native-voip-push-notification";
-import * as Notifications from "expo-notifications";
 
 export interface CallKeepOptions {
   ios: {
@@ -57,7 +56,10 @@ class CallKeepService {
         try {
           this.setupVoIPPushNotifications();
         } catch (error) {
-          console.warn("⚠️ VoIP push notification setup failed, continuing without it:", error);
+          console.warn(
+            "⚠️ VoIP push notification setup failed, continuing without it:",
+            error
+          );
         }
       }
 
@@ -101,95 +103,103 @@ class CallKeepService {
       VoipPushNotification.addEventListener("register", (token: string) => {
         console.log("✅ VoIP push token received:", token);
         // Emit event so App.tsx can send token to server
-        DeviceEventEmitter.emit('voipTokenReceived', token);
+        DeviceEventEmitter.emit("voipTokenReceived", token);
       });
 
-    VoipPushNotification.addEventListener(
-      "notification",
-      (notification: any) => {
-        console.log("🔔 VoIP push notification received:", notification);
-        
-        // Enhanced handling for background/killed state
-        const appState = AppState.currentState;
-        console.log("📱 App state when VoIP received:", appState);
+      VoipPushNotification.addEventListener(
+        "notification",
+        (notification: any) => {
+          console.log("🔔 VoIP push notification received:", notification);
 
-        // Extract call information with better fallbacks
-        const callerName = notification.callerName || 
-                          notification.from || 
-                          notification.caller ||
-                          notification.data?.callerName ||
-                          "Unknown Caller";
-        
-        const callUUID = notification.uuid || 
-                        notification.callUUID ||
-                        notification.data?.callUUID ||
-                        (uuid.v4() as string);
+          // Enhanced handling for background/killed state
+          const appState = AppState.currentState;
+          console.log("📱 App state when VoIP received:", appState);
 
-        const hasVideo = notification.hasVideo || 
-                        notification.data?.hasVideo || 
-                        false;
+          // Extract call information with better fallbacks
+          const callerName =
+            notification.callerName ||
+            notification.from ||
+            notification.caller ||
+            notification.data?.callerName ||
+            "Unknown Caller";
 
-        console.log(`📞 Processing VoIP call: ${callerName} (UUID: ${callUUID})`);
+          const callUUID =
+            notification.uuid ||
+            notification.callUUID ||
+            notification.data?.callUUID ||
+            (uuid.v4() as string);
 
-        // Store current call info
-        this.currentCallUUID = callUUID;
+          const hasVideo =
+            notification.hasVideo || notification.data?.hasVideo || false;
 
-        // Display incoming call immediately with enhanced error handling
-        try {
-          RNCallKeep.displayIncomingCall(
-            callUUID,
-            callerName,
-            callerName,
-            "generic",
-            hasVideo
+          console.log(
+            `📞 Processing VoIP call: ${callerName} (UUID: ${callUUID})`
           );
-          
-          console.log("✅ VoIP call displayed successfully:", {
-            callUUID,
-            callerName,
-            hasVideo,
-            appState
-          });
 
-          // Emit event for app to handle call data
-          DeviceEventEmitter.emit('incomingVoIPCall', {
-            callUUID,
-            callerName,
-            hasVideo,
-            notification,
-            appState
-          });
+          // Store current call info
+          this.currentCallUUID = callUUID;
 
-          // For killed/background state, ensure call screen is ready
-          if (appState !== 'active') {
-            console.log("🚀 App not active, preparing background call handling");
-            this.prepareBackgroundCallHandling(callUUID, callerName, notification);
+          // Display incoming call immediately with enhanced error handling
+          try {
+            RNCallKeep.displayIncomingCall(
+              callUUID,
+              callerName,
+              callerName,
+              "generic",
+              hasVideo
+            );
+
+            console.log("✅ VoIP call displayed successfully:", {
+              callUUID,
+              callerName,
+              hasVideo,
+              appState,
+            });
+
+            // Emit event for app to handle call data
+            DeviceEventEmitter.emit("incomingVoIPCall", {
+              callUUID,
+              callerName,
+              hasVideo,
+              notification,
+              appState,
+            });
+
+            // For killed/background state, ensure call screen is ready
+            if (appState !== "active") {
+              console.log(
+                "🚀 App not active, preparing background call handling"
+              );
+              this.prepareBackgroundCallHandling(
+                callUUID,
+                callerName,
+                notification
+              );
+            }
+          } catch (error) {
+            console.error("❌ Failed to display VoIP call:", error);
           }
-
-        } catch (error) {
-          console.error("❌ Failed to display VoIP call:", error);
-          // Fallback: try to send high priority local notification
-          this.sendHighPriorityCallNotification(callerName, callUUID);
         }
-      }
-    );
+      );
 
-    VoipPushNotification.addEventListener(
-      "didLoadWithEvents",
-      (events: any[]) => {
-        console.log("📋 VoIP push events loaded:", events);
-        // Process any queued VoIP notifications
-        events.forEach((event, index) => {
-          console.log(`🔄 Processing queued VoIP event ${index}:`, event);
-          // Re-trigger notification handling for queued events
-          if (event.type === 'notification' && event.data) {
-            setTimeout(() => {
-              VoipPushNotification.onVoipNotificationCompleted(event.callUUID);
-            }, 1000 * (index + 1)); // Stagger processing
-          }
-        });
-      }
-    );
+      VoipPushNotification.addEventListener(
+        "didLoadWithEvents",
+        (events: any[]) => {
+          console.log("📋 VoIP push events loaded:", events);
+          // Process any queued VoIP notifications
+          events.forEach((event, index) => {
+            console.log(`🔄 Processing queued VoIP event ${index}:`, event);
+            // Re-trigger notification handling for queued events
+            if (event.type === "notification" && event.data) {
+              setTimeout(() => {
+                VoipPushNotification.onVoipNotificationCompleted(
+                  event.callUUID
+                );
+              }, 1000 * (index + 1)); // Stagger processing
+            }
+          });
+        }
+      );
 
       // Request VoIP push token
       VoipPushNotification.registerVoipToken();
@@ -200,47 +210,24 @@ class CallKeepService {
     }
   }
 
-  private async prepareBackgroundCallHandling(callUUID: string, callerName: string, notification: any): Promise<void> {
+  private async prepareBackgroundCallHandling(
+    callUUID: string,
+    callerName: string,
+    notification: any
+  ): Promise<void> {
     try {
       // Wake up the app's call handling logic
       console.log("🔄 Preparing background call handling");
-      
+
       // Emit event that app can listen to even in background
-      DeviceEventEmitter.emit('backgroundCallReceived', {
+      DeviceEventEmitter.emit("backgroundCallReceived", {
         callUUID,
         callerName,
         notification,
-        timestamp: Date.now()
+        timestamp: Date.now(),
       });
-
     } catch (error) {
       console.error("❌ Failed to prepare background call handling:", error);
-    }
-  }
-
-  private async sendHighPriorityCallNotification(callerName: string, callUUID: string): Promise<void> {
-    try {
-      console.log("🚨 Sending high priority fallback notification");
-      
-      await Notifications.scheduleNotificationAsync({
-        content: {
-          title: "Incoming Call",
-          body: `Call from ${callerName}`,
-          sound: 'default',
-          priority: Notifications.AndroidImportance.MAX.toString(),
-          categoryIdentifier: 'call',
-          data: {
-            type: 'call',
-            callUUID,
-            callerName,
-            timestamp: Date.now()
-          }
-        },
-        trigger: null, // Immediate
-      });
-
-    } catch (error) {
-      console.error("❌ Failed to send high priority notification:", error);
     }
   }
 
@@ -285,36 +272,139 @@ class CallKeepService {
 
   public async sendHighPriorityDataMessage(data: any): Promise<void> {
     // For FCM high priority data messages that work with killed apps
-    if (Platform.OS === 'android') {
+    if (Platform.OS === "android") {
       try {
         console.log("📱 Processing high priority data message:", data);
-        
+
         // Check if this is a call notification
-        if (data.type === 'call' || data.messageType === 'call') {
+        if (
+          data.type === "call" ||
+          data.messageType === "call" ||
+          data.type === "incoming_call"
+        ) {
           const callerName = data.callerName || data.from || "Unknown Caller";
-          const callUUID = data.callUUID || (uuid.v4() as string);
-          
-          console.log("📞 High priority call data received:", { callerName, callUUID });
-          
-          // Immediately trigger CallKeep
-          this.displayIncomingCall(callerName);
-          
-          // Also send local high priority notification as backup
-          await this.sendHighPriorityCallNotification(callerName, callUUID);
+          const callUUID =
+            data.callUUID || data.callId || (uuid.v4() as string);
+
+          console.log("📞 Android call notification received:", {
+            callerName,
+            callUUID,
+          });
+
+          // Store call data for handling
+          this.currentCallUUID = callUUID;
+
+          // Always try to display call immediately, regardless of app state
+          const currentAppState = AppState.currentState;
+          console.log(
+            "📱 Current app state:",
+            currentAppState,
+            "- attempting to display call immediately"
+          );
+
+          try {
+            // For background/killed state, try to display call without setup first
+            if (currentAppState !== "active" && !this.isSetup) {
+              console.log(
+                "🚀 App in background - trying to display call without setup first"
+              );
+              try {
+                // Attempt to display call directly (might work if CallKeep was previously initialized)
+                this.displayIncomingCall(callerName, callUUID);
+                console.log(
+                  "✅ Call displayed successfully without setup in app state:",
+                  currentAppState
+                );
+                return; // Success, exit early
+              } catch (directCallError) {
+                console.log(
+                  "⚠️ Direct call display failed, trying with setup:",
+                  directCallError
+                );
+              }
+            }
+
+            // Setup CallKeep if needed
+            if (!this.isSetup) {
+              console.log("🔧 CallKeep not setup, initializing...");
+              await this.setup();
+            }
+
+            // Display the incoming call
+            this.displayIncomingCall(callerName, callUUID);
+            console.log(
+              "✅ Call displayed successfully with setup in app state:",
+              currentAppState
+            );
+          } catch (error) {
+            console.error("❌ Failed to display call immediately:", error);
+            console.log("🔄 Falling back to deferred handling");
+            this.deferCall(callUUID, callerName, data);
+          }
         }
       } catch (error) {
-        console.error("❌ Failed to process high priority data message:", error);
+        console.error(
+          "❌ Failed to process Android high priority data message:",
+          error
+        );
       }
     }
   }
 
-  public displayIncomingCall(callerName: string = "Unknown"): string {
-    const callUUID = uuid.v4() as string;
+  private deferCall(callUUID: string, callerName: string, data: any): void {
+    // Emit event that can be processed when app becomes active
+    DeviceEventEmitter.emit("incomingCallPending", {
+      callUUID,
+      callerName,
+      platform: "android",
+      data,
+      timestamp: Date.now(),
+    });
+
+    console.log(
+      "✅ Android call data stored - will display when app becomes active"
+    );
+  }
+
+  public displayIncomingCall(
+    callerName: string = "Unknown",
+    providedUUID?: string
+  ): string {
+    const callUUID = providedUUID || (uuid.v4() as string);
     this.currentCallUUID = callUUID;
 
     try {
-      console.log(`📞 Displaying incoming call: ${callerName} (UUID: ${callUUID})`);
-      
+      console.log(
+        `📞 Displaying incoming call: ${callerName} (UUID: ${callUUID}) on ${Platform.OS}`
+      );
+
+      // If CallKeep is not initialized, try to display call directly anyway
+      if (!this.isSetup) {
+        console.warn(
+          "⚠️ CallKeep not initialized, attempting direct call display..."
+        );
+        // Try to display call directly - this might work if the native module is available
+        try {
+          RNCallKeep.displayIncomingCall(
+            callUUID,
+            callerName,
+            callerName, // localizedCallerName
+            "generic", // handleType
+            false // hasVideo
+          );
+          console.log(
+            `✅ Direct call display succeeded without setup: ${callUUID} from ${callerName}`
+          );
+          return callUUID;
+        } catch (directError) {
+          console.warn("⚠️ Direct call display failed:", directError);
+          // Continue to throw error so caller can handle appropriately
+          throw new Error(
+            `CallKeep not initialized and direct call failed: ${directError}`
+          );
+        }
+      }
+
       // Enhanced parameters for better CallKeep integration
       RNCallKeep.displayIncomingCall(
         callUUID,
@@ -323,16 +413,19 @@ class CallKeepService {
         "generic", // handleType
         false // hasVideo
       );
-      
-      console.log(`✅ Incoming call displayed successfully: ${callUUID} from ${callerName}`);
-      
+
+      console.log(
+        `✅ Incoming call displayed successfully: ${callUUID} from ${callerName}`
+      );
+
       // Emit event for app to handle
-      DeviceEventEmitter.emit('callDisplayed', {
+      DeviceEventEmitter.emit("callDisplayed", {
         callUUID,
         callerName,
-        timestamp: Date.now()
+        platform: Platform.OS,
+        timestamp: Date.now(),
       });
-      
+
       return callUUID;
     } catch (error) {
       console.error("❌ Failed to display incoming call:", error);
@@ -430,39 +523,73 @@ class CallKeepService {
   private onAnswerCall = ({ callUUID }: { callUUID: string }): void => {
     console.log("📞 Call answered:", callUUID);
     this.currentCallUUID = callUUID;
-    
+
     // Force app to foreground when call is answered from lock screen
-    console.log("🔄 Call answered from lock screen - bringing app to foreground");
-    
+    console.log(
+      "🔄 Call answered from lock screen - bringing app to foreground"
+    );
+
     // This is crucial for waking the app when answered from lock screen
     setTimeout(() => {
-      if (Platform.OS === 'ios') {
-        // Request app to come to foreground
+      if (Platform.OS === "ios") {
+        // Request app to come to foreground on iOS
         RNCallKeep.backToForeground();
+      } else if (Platform.OS === "android") {
+        // For Android, explicitly request app to come to foreground
+        console.log("📱 Android call answered - bringing app to foreground");
+        try {
+          RNCallKeep.backToForeground();
+        } catch (error) {
+          console.warn("⚠️ Failed to bring Android app to foreground:", error);
+        }
       }
-    }, 100); // Small delay to ensure CallKit processes the answer first
-    
+    }, 100); // Small delay to ensure CallKeep processes the answer first
+
     // Emit event for app to handle call answer
-    DeviceEventEmitter.emit('callAnswered', {
+    DeviceEventEmitter.emit("callAnswered", {
       callUUID,
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      platform: Platform.OS,
     });
-    
+
+    // Also emit a specific event to request app foreground
+    DeviceEventEmitter.emit("bringAppToForeground", {
+      callUUID,
+      reason: "callAnswered",
+      timestamp: Date.now(),
+    });
+
     // Automatically end the call after answering (since we just want to open the app)
     setTimeout(() => {
       console.log("🔄 Auto-ending call to open app:", callUUID);
+
+      // Check current app state before ending call
+      const currentAppState = AppState.currentState;
+      console.log("📱 App state before ending call:", currentAppState);
+
       this.endCall(callUUID);
       this.clearCurrentCall();
-      
+
       // Emit event that the notification call is complete and app should handle
-      DeviceEventEmitter.emit('notificationCallCompleted', {
+      DeviceEventEmitter.emit("notificationCallCompleted", {
         callUUID,
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        appState: currentAppState,
       });
-    }, 500); // Small delay to ensure CallKit UI shows briefly
-    
+
+      // Final attempt to bring app to foreground after call ends
+      setTimeout(() => {
+        console.log("📱 Final foreground request after call ended");
+        DeviceEventEmitter.emit("bringAppToForeground", {
+          callUUID,
+          reason: "postCallCleanup",
+          timestamp: Date.now(),
+        });
+      }, 100);
+    }, 300); // Reduced delay to end call faster
+
     // Complete VoIP notification if it exists
-    if (Platform.OS === 'ios') {
+    if (Platform.OS === "ios") {
       try {
         VoipPushNotification.onVoipNotificationCompleted(callUUID);
       } catch (error) {
@@ -473,23 +600,23 @@ class CallKeepService {
 
   private onEndCall = ({ callUUID }: { callUUID: string }): void => {
     console.log("📞 Call ended:", callUUID);
-    
+
     // Clear current call if it matches
     if (this.currentCallUUID === callUUID) {
       this.currentCallUUID = null;
     }
-    
+
     // Emit event for app to handle call end
-    DeviceEventEmitter.emit('callEnded', {
+    DeviceEventEmitter.emit("callEnded", {
       callUUID,
-      timestamp: Date.now()
+      timestamp: Date.now(),
     });
-    
+
     // End the call
     RNCallKeep.endCall(callUUID);
-    
+
     // Complete VoIP notification if it exists
-    if (Platform.OS === 'ios') {
+    if (Platform.OS === "ios") {
       try {
         VoipPushNotification.onVoipNotificationCompleted(callUUID);
       } catch (error) {
