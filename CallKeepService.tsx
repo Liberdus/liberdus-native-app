@@ -37,7 +37,7 @@ class CallKeepService {
       maximumCallGroups: "1",
       maximumCallsPerCallGroup: "1",
       supportsVideo: false,
-      includesCallsInRecents: false,
+      includesCallsInRecents: true,
     },
     android: {
       alertTitle: "Phone call permissions",
@@ -295,7 +295,7 @@ class CallKeepService {
           const isFromBackgroundHandler = data.fromBackgroundHandler === true;
           const forceImmediate = data.forceImmediate === true;
           const currentAppState = AppState.currentState;
-          
+
           console.log(
             "📱 Current app state:",
             currentAppState,
@@ -308,8 +308,10 @@ class CallKeepService {
           try {
             // For killed app from background handler, use most aggressive approach
             if (isFromBackgroundHandler && forceImmediate) {
-              console.log("💀 App is killed - using maximum aggressive approach");
-              
+              console.log(
+                "💀 App is killed - using maximum aggressive approach"
+              );
+
               // Try the headless task approach first for killed apps
               try {
                 console.log("🔄 Killed app: Triggering headless task directly");
@@ -322,15 +324,20 @@ class CallKeepService {
                     callerName,
                     false
                   );
-                  console.log("✅ Killed app: Headless task triggered successfully");
+                  console.log(
+                    "✅ Killed app: Headless task triggered successfully"
+                  );
                   return;
                 } else {
                   throw new Error("Native module not available");
                 }
               } catch (headlessError) {
-                console.log("⚠️ Killed app: Headless task failed:", headlessError);
+                console.log(
+                  "⚠️ Killed app: Headless task failed:",
+                  headlessError
+                );
               }
-              
+
               // If all attempts fail, just log the failure
               console.log("❌ Killed app: All headless task attempts failed");
               return;
@@ -394,7 +401,6 @@ class CallKeepService {
       }
     }
   }
-
 
   public displayIncomingCall(
     callerName: string = "Unknown",
