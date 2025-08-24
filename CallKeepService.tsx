@@ -19,11 +19,17 @@ export interface CallKeepOptions {
     imageName?: string;
     additionalPermissions: string[];
     selfManaged: boolean;
+    foregroundService?: {
+      channelId: string;
+      channelName: string;
+      notificationTitle: string;
+      notificationIcon: string;
+    };
   };
 }
 
 class CallKeepService {
-  private isSetup: boolean = false;
+  public isSetup: boolean = false;
   private currentCallUUID: string | null = null;
   private callKeepOptions: CallKeepOptions = {
     ios: {
@@ -31,7 +37,7 @@ class CallKeepService {
       maximumCallGroups: "1",
       maximumCallsPerCallGroup: "1",
       supportsVideo: false,
-      includesCallsInRecents: true,
+      includesCallsInRecents: false,
     },
     android: {
       alertTitle: "Phone call permissions",
@@ -40,6 +46,13 @@ class CallKeepService {
       okButton: "OK",
       additionalPermissions: [],
       selfManaged: false,
+      // Add foreground service configuration for Android 10+
+      foregroundService: {
+        channelId: "com.liberdus.callkeep",
+        channelName: "Liberdus Background Call Service",
+        notificationTitle: "Liberdus is handling calls",
+        notificationIcon: "ic_launcher", // Uses your app icon
+      },
     },
   };
 
@@ -47,10 +60,11 @@ class CallKeepService {
     if (this.isSetup) return;
 
     try {
+      console.log(`🔧 Starting CallKeep setup for ${Platform.OS}...`);
       await RNCallKeep.setup(this.callKeepOptions);
       this.setupEventListeners();
 
-      // Request permissions for iOS
+      // Platform-specific permissions and setup
       if (Platform.OS === "ios") {
         await this.requestIOSPermissions();
         try {
@@ -61,12 +75,44 @@ class CallKeepService {
             error
           );
         }
+      } else if (Platform.OS === "android") {
+        // Android-specific setup
+        console.log("🤖 Setting up Android-specific CallKeep features...");
+        try {
+          // Check and request phone account permissions
+          const hasPhoneAccount = await this.checkPhoneAccountPermission();
+          console.log(`📞 Android phone account status: ${hasPhoneAccount}`);
+
+          if (!hasPhoneAccount) {
+            console.log("🔐 Requesting Android phone account permission...");
+            const permissionGranted =
+              await this.requestPhoneAccountPermission();
+            console.log(
+              `📞 Android phone account permission granted: ${permissionGranted}`
+            );
+
+            if (!permissionGranted) {
+              console.warn(
+                "⚠️ Android phone account permission not granted - call UI may not work properly"
+              );
+            }
+          }
+
+          // Register Android events
+          console.log("📡 Registering Android CallKeep events...");
+          RNCallKeep.registerAndroidEvents();
+        } catch (androidError) {
+          console.error("❌ Android CallKeep setup error:", androidError);
+          // Don't throw - continue with basic setup
+        }
       }
 
       this.isSetup = true;
-      console.log("CallKeep setup completed successfully");
+      console.log(
+        `✅ CallKeep setup completed successfully for ${Platform.OS}`
+      );
     } catch (error) {
-      console.error("CallKeep setup failed:", error);
+      console.error(`❌ CallKeep setup failed for ${Platform.OS}:`, error);
       throw error;
     }
   }
@@ -99,13 +145,6 @@ class CallKeepService {
     console.log("Setting up VoIP push notifications with enhanced handling");
 
     try {
-      // Register for VoIP push notifications
-      VoipPushNotification.addEventListener("register", (token: string) => {
-        console.log("✅ VoIP push token received:", token);
-        // Emit event so App.tsx can send token to server
-        DeviceEventEmitter.emit("voipTokenReceived", token);
-      });
-
       VoipPushNotification.addEventListener(
         "notification",
         (notification: any) => {
@@ -155,27 +194,6 @@ class CallKeepService {
               hasVideo,
               appState,
             });
-
-            // Emit event for app to handle call data
-            DeviceEventEmitter.emit("incomingVoIPCall", {
-              callUUID,
-              callerName,
-              hasVideo,
-              notification,
-              appState,
-            });
-
-            // For killed/background state, ensure call screen is ready
-            if (appState !== "active") {
-              console.log(
-                "🚀 App not active, preparing background call handling"
-              );
-              this.prepareBackgroundCallHandling(
-                callUUID,
-                callerName,
-                notification
-              );
-            }
           } catch (error) {
             console.error("❌ Failed to display VoIP call:", error);
           }
@@ -207,27 +225,6 @@ class CallKeepService {
     } catch (error) {
       console.error("❌ Failed to setup VoIP push notifications:", error);
       throw error;
-    }
-  }
-
-  private async prepareBackgroundCallHandling(
-    callUUID: string,
-    callerName: string,
-    notification: any
-  ): Promise<void> {
-    try {
-      // Wake up the app's call handling logic
-      console.log("🔄 Preparing background call handling");
-
-      // Emit event that app can listen to even in background
-      DeviceEventEmitter.emit("backgroundCallReceived", {
-        callUUID,
-        callerName,
-        notification,
-        timestamp: Date.now(),
-      });
-    } catch (error) {
-      console.error("❌ Failed to prepare background call handling:", error);
     }
   }
 
@@ -294,52 +291,99 @@ class CallKeepService {
           // Store call data for handling
           this.currentCallUUID = callUUID;
 
-          // Always try to display call immediately, regardless of app state
+          // Check if this is from background handler and app is killed
+          const isFromBackgroundHandler = data.fromBackgroundHandler === true;
+          const forceImmediate = data.forceImmediate === true;
           const currentAppState = AppState.currentState;
+          
           console.log(
             "📱 Current app state:",
             currentAppState,
-            "- attempting to display call immediately"
+            "- fromBackground:",
+            isFromBackgroundHandler,
+            "- forceImmediate:",
+            forceImmediate
           );
 
           try {
-            // For background/killed state, try to display call without setup first
-            if (currentAppState !== "active" && !this.isSetup) {
-              console.log(
-                "🚀 App in background - trying to display call without setup first"
-              );
+            // For killed app from background handler, use most aggressive approach
+            if (isFromBackgroundHandler && forceImmediate) {
+              console.log("💀 App is killed - using maximum aggressive approach");
+              
+              // Try the headless task approach first for killed apps
               try {
-                // Attempt to display call directly (might work if CallKeep was previously initialized)
-                this.displayIncomingCall(callerName, callUUID);
-                console.log(
-                  "✅ Call displayed successfully without setup in app state:",
-                  currentAppState
-                );
-                return; // Success, exit early
-              } catch (directCallError) {
-                console.log(
-                  "⚠️ Direct call display failed, trying with setup:",
-                  directCallError
-                );
+                console.log("🔄 Killed app: Triggering headless task directly");
+                const { NativeModules } = require("react-native");
+                if (NativeModules.RNCallKeep) {
+                  // Try to trigger headless task via native module
+                  NativeModules.RNCallKeep.displayIncomingCall(
+                    callUUID,
+                    callerName,
+                    callerName,
+                    false
+                  );
+                  console.log("✅ Killed app: Headless task triggered successfully");
+                  return;
+                } else {
+                  throw new Error("Native module not available");
+                }
+              } catch (headlessError) {
+                console.log("⚠️ Killed app: Headless task failed:", headlessError);
               }
+              
+              // If all attempts fail, just log the failure
+              console.log("❌ Killed app: All headless task attempts failed");
+              return;
             }
 
-            // Setup CallKeep if needed
+            // For background/active state, use existing logic
+            if (currentAppState !== "active") {
+              console.log(
+                "🚀 App not active - trying multiple direct call approaches"
+              );
+
+              // First attempt: Try direct display without any setup
+              try {
+                console.log("🔄 Attempt 1: Direct call display without setup");
+                RNCallKeep.displayIncomingCall(
+                  callUUID,
+                  callerName,
+                  callerName,
+                  "generic",
+                  false
+                );
+                console.log("✅ Direct call display successful without setup");
+                return;
+              } catch (directError) {
+                console.log("⚠️ Direct display failed:", directError);
+              }
+
+              // Second attempt: Try with minimal setup
+              try {
+                console.log("🔄 Attempt 2: Setup then display");
+                await this.setup();
+                this.displayIncomingCall(callerName, callUUID);
+                console.log("✅ Call displayed after setup");
+                return;
+              } catch (setupError) {
+                console.log("⚠️ Setup + display failed:", setupError);
+              }
+
+              // Third attempt failed - no more options for background state
+              console.log("❌ All attempts failed for background app state");
+              return;
+            }
+
+            // For active app state - standard flow
             if (!this.isSetup) {
               console.log("🔧 CallKeep not setup, initializing...");
               await this.setup();
             }
 
-            // Display the incoming call
             this.displayIncomingCall(callerName, callUUID);
-            console.log(
-              "✅ Call displayed successfully with setup in app state:",
-              currentAppState
-            );
+            console.log("✅ Call displayed successfully in active app state");
           } catch (error) {
-            console.error("❌ Failed to display call immediately:", error);
-            console.log("🔄 Falling back to deferred handling");
-            this.deferCall(callUUID, callerName, data);
+            console.error("❌ All call display attempts failed:", error);
           }
         }
       } catch (error) {
@@ -351,20 +395,6 @@ class CallKeepService {
     }
   }
 
-  private deferCall(callUUID: string, callerName: string, data: any): void {
-    // Emit event that can be processed when app becomes active
-    DeviceEventEmitter.emit("incomingCallPending", {
-      callUUID,
-      callerName,
-      platform: "android",
-      data,
-      timestamp: Date.now(),
-    });
-
-    console.log(
-      "✅ Android call data stored - will display when app becomes active"
-    );
-  }
 
   public displayIncomingCall(
     callerName: string = "Unknown",
@@ -377,6 +407,7 @@ class CallKeepService {
       console.log(
         `📞 Displaying incoming call: ${callerName} (UUID: ${callUUID}) on ${Platform.OS}`
       );
+      console.log(`🔧 CallKeep setup status: ${this.isSetup}`);
 
       // If CallKeep is not initialized, try to display call directly anyway
       if (!this.isSetup) {
@@ -405,7 +436,32 @@ class CallKeepService {
         }
       }
 
+      // Android-specific permission check
+      if (Platform.OS === "android") {
+        console.log("🔐 Checking Android phone account permissions...");
+        try {
+          const hasPhoneAccount = this.checkPhoneAccountPermission();
+          console.log(
+            `📞 Android phone account permission: ${hasPhoneAccount}`
+          );
+
+          if (!hasPhoneAccount) {
+            console.warn(
+              "⚠️ Android: No phone account permission - this may prevent call UI from showing"
+            );
+          }
+        } catch (permError) {
+          console.error(
+            "❌ Error checking Android phone account permission:",
+            permError
+          );
+        }
+      }
+
       // Enhanced parameters for better CallKeep integration
+      console.log(
+        `🚀 Attempting to display call via RNCallKeep.displayIncomingCall...`
+      );
       RNCallKeep.displayIncomingCall(
         callUUID,
         callerName,
@@ -415,16 +471,33 @@ class CallKeepService {
       );
 
       console.log(
-        `✅ Incoming call displayed successfully: ${callUUID} from ${callerName}`
+        `✅ RNCallKeep.displayIncomingCall completed for: ${callUUID} from ${callerName}`
       );
 
-      // Emit event for app to handle
-      DeviceEventEmitter.emit("callDisplayed", {
-        callUUID,
-        callerName,
-        platform: Platform.OS,
-        timestamp: Date.now(),
-      });
+      // Additional Android-specific verification and fallback
+      if (Platform.OS === "android") {
+        setTimeout(async () => {
+          console.log("🔍 Android: Verifying call display after delay...");
+
+          // Check if we need to provide a fallback notification
+          try {
+            const hasPhoneAccount = await this.checkPhoneAccountPermission();
+            if (!hasPhoneAccount) {
+              console.warn(
+                "⚠️ Android: Phone account not available, call UI may not be showing"
+              );
+              console.log(
+                "📱 Consider implementing fallback notification for call"
+              );
+            }
+          } catch (verifyError) {
+            console.error(
+              "❌ Android: Error verifying call display:",
+              verifyError
+            );
+          }
+        }, 1000);
+      }
 
       return callUUID;
     } catch (error) {
@@ -519,74 +592,227 @@ class CallKeepService {
     return true; // iOS doesn't need this permission
   }
 
+  private handleCallEndingFromKilledState(callUUID: string): void {
+    console.log("🔄 Setting up fast call ending for killed app state");
+
+    // For killed app state, we want faster call ending to launch the app quickly
+    const fastDelays = [100, 300, 600]; // Much faster delays
+
+    fastDelays.forEach((delay, index) => {
+      setTimeout(() => {
+        console.log(
+          `🔄 Fast killed state call end attempt ${index + 1} after ${delay}ms`
+        );
+        this.performCallEnd(callUUID, `killed-fast-${index + 1}`);
+      }, delay);
+    });
+
+    // More aggressive app state monitoring with immediate action
+    const handleAppStateChange = (nextAppState: string) => {
+      console.log(`📱 App state changed from killed to: ${nextAppState}`);
+
+      if (nextAppState === "active") {
+        console.log("📱 App became active - immediate call end and cleanup");
+        subscription.remove();
+        // Immediate call end when app becomes active from killed state
+        this.performCallEnd(callUUID, "app-became-active-immediate");
+      } else if (nextAppState === "background") {
+        console.log("📱 App moved to background - attempting call end");
+        // Also end call if app goes to background (might be transitioning)
+        setTimeout(() => {
+          this.performCallEnd(callUUID, "app-to-background");
+        }, 50);
+      }
+    };
+
+    const subscription = AppState.addEventListener(
+      "change",
+      handleAppStateChange
+    );
+
+    // Shorter cleanup timeout since we want faster response
+    setTimeout(() => {
+      subscription.remove();
+      console.log("🔄 App state listener cleaned up after 5 seconds");
+    }, 5000);
+  }
+
+  private handleCallEndingFromActiveState(callUUID: string): void {
+    console.log("🔄 Setting up call ending for active app state");
+
+    // For active app, use immediate + backup strategy
+    const autoEndDelay = Platform.OS === "android" ? 300 : 200;
+    console.log(
+      `⏱️ Setting auto-end timer for ${autoEndDelay}ms on ${Platform.OS}`
+    );
+
+    // Immediate end call attempt
+    this.performCallEnd(callUUID, "immediate");
+
+    // Backup end call attempts with shorter delays since app is active
+    const backupDelays = [autoEndDelay, autoEndDelay * 2];
+    backupDelays.forEach((delay, index) => {
+      setTimeout(() => {
+        console.log(
+          `🔄 Active state backup call end attempt ${
+            index + 1
+          } after ${delay}ms`
+        );
+        this.performCallEnd(callUUID, `active-backup-${index + 1}`);
+      }, delay);
+    });
+  }
+
+  private performCallEnd(callUUID: string, attempt: string): void {
+    // Only proceed if this call is still current
+    if (this.currentCallUUID !== callUUID) {
+      console.log(
+        `🚫 Skipping ${attempt} end call - ${callUUID} is no longer current call`
+      );
+      return;
+    }
+
+    try {
+      console.log(`📞 ${attempt} ending call ${callUUID} on ${Platform.OS}`);
+      RNCallKeep.endCall(callUUID);
+
+      // Only clear if this was our current call
+      if (this.currentCallUUID === callUUID) {
+        this.clearCurrentCall();
+        console.log(
+          `✅ Call ${callUUID} ended successfully on ${Platform.OS} (${attempt})`
+        );
+
+        // For killed app scenarios, be more aggressive about bringing app to foreground
+        const isKilledAppAttempt =
+          attempt.includes("killed") || attempt.includes("app-became-active");
+
+        if (isKilledAppAttempt) {
+          console.log("🚀 Killed app call ended - aggressively launching app");
+          try {
+            // Multiple attempts to bring app to foreground
+            RNCallKeep.backToForeground();
+
+            // Also emit event for immediate app handling
+            DeviceEventEmitter.emit("appLaunchCallCompleted", {
+              callUUID,
+              timestamp: Date.now(),
+              platform: Platform.OS,
+              fromKilledState: true,
+            });
+
+            // Additional foreground attempt after short delay
+            setTimeout(() => {
+              try {
+                RNCallKeep.backToForeground();
+                console.log("✅ Secondary app launch attempt completed");
+              } catch (secondaryError) {
+                console.log("⚠️ Secondary app launch failed:", secondaryError);
+              }
+            }, 200);
+          } catch (launchError) {
+            console.error("❌ Failed to launch app aggressively:", launchError);
+          }
+        } else {
+          // Standard app launch call completion event
+          if (attempt === "immediate" || attempt.includes("active-backup-1")) {
+            DeviceEventEmitter.emit("appLaunchCallCompleted", {
+              callUUID,
+              timestamp: Date.now(),
+              platform: Platform.OS,
+              fromKilledState: false,
+            });
+          }
+        }
+      }
+    } catch (error) {
+      console.error(
+        `❌ Failed to end call ${callUUID} on ${Platform.OS} (${attempt}):`,
+        error
+      );
+
+      // Try endAllCalls as fallback for critical attempts
+      if (
+        attempt === "immediate" ||
+        attempt.includes("killed-fast-1") ||
+        attempt === "app-became-active-immediate"
+      ) {
+        try {
+          console.log(`🔄 Attempting endAllCalls() fallback on ${Platform.OS}`);
+          RNCallKeep.endAllCalls();
+          this.clearCurrentCall();
+          console.log(`✅ All calls ended as fallback on ${Platform.OS}`);
+
+          // Still try to launch app even with fallback
+          if (
+            attempt.includes("killed") ||
+            attempt.includes("app-became-active")
+          ) {
+            try {
+              RNCallKeep.backToForeground();
+            } catch (launchError) {
+              console.log("⚠️ App launch failed in fallback:", launchError);
+            }
+          }
+        } catch (fallbackError) {
+          console.error(
+            `❌ Failed to end calls with fallback on ${Platform.OS}:`,
+            fallbackError
+          );
+        }
+      }
+    }
+  }
+
   // Enhanced Event handlers
   private onAnswerCall = ({ callUUID }: { callUUID: string }): void => {
     console.log("📞 Call answered:", callUUID);
     this.currentCallUUID = callUUID;
 
-    // Force app to foreground when call is answered from lock screen
     console.log(
       "🔄 Call answered from lock screen - bringing app to foreground"
     );
 
-    // This is crucial for waking the app when answered from lock screen
-    setTimeout(() => {
-      if (Platform.OS === "ios") {
-        // Request app to come to foreground on iOS
-        RNCallKeep.backToForeground();
-      } else if (Platform.OS === "android") {
-        // For Android, explicitly request app to come to foreground
-        console.log("📱 Android call answered - bringing app to foreground");
-        try {
-          RNCallKeep.backToForeground();
-        } catch (error) {
-          console.warn("⚠️ Failed to bring Android app to foreground:", error);
-        }
-      }
-    }, 100); // Small delay to ensure CallKeep processes the answer first
+    // Check if we're in a fresh app launch (killed state recovery)
+    const appState = AppState.currentState;
+    const isAppJustLaunched = appState !== "active";
 
-    // Emit event for app to handle call answer
-    DeviceEventEmitter.emit("callAnswered", {
-      callUUID,
-      timestamp: Date.now(),
-      platform: Platform.OS,
-    });
+    console.log(
+      `📱 App state when call answered: ${appState}, isAppJustLaunched: ${isAppJustLaunched}`
+    );
 
-    // Also emit a specific event to request app foreground
-    DeviceEventEmitter.emit("bringAppToForeground", {
-      callUUID,
-      reason: "callAnswered",
-      timestamp: Date.now(),
-    });
+    // Bring app to foreground immediately
+    try {
+      console.log("🔄 Immediately bringing app to foreground");
+      RNCallKeep.backToForeground();
+      console.log("✅ backToForeground() called successfully");
+    } catch (error) {
+      console.error("❌ Failed to bring app to foreground:", error);
+    }
 
-    // Automatically end the call after answering (since we just want to open the app)
-    setTimeout(() => {
-      console.log("🔄 Auto-ending call to open app:", callUUID);
+    // Platform-specific immediate handling
+    if (Platform.OS === "android") {
+      console.log("📱 Android call answered - immediate foreground handling");
 
-      // Check current app state before ending call
-      const currentAppState = AppState.currentState;
-      console.log("📱 App state before ending call:", currentAppState);
-
-      this.endCall(callUUID);
-      this.clearCurrentCall();
-
-      // Emit event that the notification call is complete and app should handle
-      DeviceEventEmitter.emit("notificationCallCompleted", {
+      // Emit immediate event for Android
+      DeviceEventEmitter.emit("androidCallAnswered", {
         callUUID,
         timestamp: Date.now(),
-        appState: currentAppState,
       });
+    }
 
-      // Final attempt to bring app to foreground after call ends
-      setTimeout(() => {
-        console.log("📱 Final foreground request after call ended");
-        DeviceEventEmitter.emit("bringAppToForeground", {
-          callUUID,
-          reason: "postCallCleanup",
-          timestamp: Date.now(),
-        });
-      }, 100);
-    }, 300); // Reduced delay to end call faster
+    // For killed app state, we want faster call ending and more aggressive app launch
+    if (isAppJustLaunched) {
+      console.log(
+        "🚀 App was killed - using fast call ending with aggressive app launch"
+      );
+      this.handleCallEndingFromKilledState(callUUID);
+    } else {
+      console.log(
+        "🏃 App was already running - using standard call ending strategy"
+      );
+      this.handleCallEndingFromActiveState(callUUID);
+    }
 
     // Complete VoIP notification if it exists
     if (Platform.OS === "ios") {
@@ -606,14 +832,23 @@ class CallKeepService {
       this.currentCallUUID = null;
     }
 
-    // Emit event for app to handle call end
-    DeviceEventEmitter.emit("callEnded", {
-      callUUID,
-      timestamp: Date.now(),
-    });
-
-    // End the call
-    RNCallKeep.endCall(callUUID);
+    // End the call with platform-specific handling
+    try {
+      RNCallKeep.endCall(callUUID);
+      console.log(`✅ Call ${callUUID} ended successfully on ${Platform.OS}`);
+    } catch (error) {
+      console.error(
+        `❌ Failed to end call ${callUUID} on ${Platform.OS}:`,
+        error
+      );
+      // Try ending all calls as fallback
+      try {
+        RNCallKeep.endAllCalls();
+        console.log("✅ All calls ended as fallback");
+      } catch (fallbackError) {
+        console.error("❌ Failed to end all calls:", fallbackError);
+      }
+    }
 
     // Complete VoIP notification if it exists
     if (Platform.OS === "ios") {
