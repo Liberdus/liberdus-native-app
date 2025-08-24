@@ -43,6 +43,7 @@ interface APP_PARAMS {
   deviceToken?: string;
   expoPushToken?: string;
   voipPushToken?: string;
+  fcmToken?: string;
 }
 
 interface CallData {
@@ -335,6 +336,7 @@ const App: React.FC = () => {
   const [deviceToken, setDeviceToken] = useState<string | null>(null);
   const [expoPushToken, setExpoPushToken] = useState<string | null>(null);
   const [voipPushToken, setVoipPushToken] = useState<string | null>(null);
+  const [fcmToken, setFcmToken] = useState<string | null>(null);
   const [hasLaunchedOnce, setHasLaunchedOnce] = useState(false);
   const [showWebView, setShowWebView] = useState(false);
   const [webViewUrl, setWebViewUrl] = useState<string>("");
@@ -586,7 +588,7 @@ const App: React.FC = () => {
           try {
             const fcmToken = await messaging().getToken();
             console.log("🔑 FCM Token:", fcmToken);
-            // You can store this token to send to your server
+            setFcmToken(fcmToken);
           } catch (error) {
             console.error("❌ Error getting FCM token:", error);
           }
@@ -1026,13 +1028,16 @@ const App: React.FC = () => {
         const data: APP_PARAMS = {
           appVersion,
         };
-        if (deviceToken && (expoPushToken || voipPushToken)) {
+        if (deviceToken && (expoPushToken || voipPushToken || fcmToken)) {
           data.deviceToken = deviceToken;
           if (expoPushToken) {
             data.expoPushToken = expoPushToken;
           }
           if (voipPushToken) {
             data.voipPushToken = voipPushToken;
+          }
+          if (fcmToken) {
+            data.fcmToken = fcmToken;
           }
         }
         console.log("🚀 App parameters:", data);
