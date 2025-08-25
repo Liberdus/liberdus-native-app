@@ -5,11 +5,11 @@ import messaging, {
 } from "@react-native-firebase/messaging";
 import RNCallKeep from "react-native-callkeep";
 import uuid from "react-native-uuid";
-
 import App from "./App";
 
 // Background message handler for Firebase (when app is killed or backgrounded)
 // This must be set at module level, outside of any component
+console.log("🔧 Setting up Firebase background message handler...");
 try {
   messaging().setBackgroundMessageHandler(
     async (remoteMessage: FirebaseMessagingTypes.RemoteMessage) => {
@@ -151,7 +151,7 @@ try {
       }
     }
   );
-  console.log("✅ Firebase messaging background handler set up");
+  console.log("✅ Firebase messaging background handler set up successfully");
 } catch (error) {
   console.warn(
     "⚠️ Firebase not initialized yet, background handler will be set up later:",
