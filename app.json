@@ -79,12 +79,7 @@
     },
     "plugins": [
       [
-        "expo-notifications",
-        {
-          "icon": "./assets/icon.png",
-          "color": "#ffffff",
-          "defaultChannel": "calls"
-        }
+        "expo-notifications"
       ],
       [
         "@config-plugins/react-native-callkeep",

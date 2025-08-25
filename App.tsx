@@ -25,10 +25,10 @@ import * as Sharing from "expo-sharing";
 import FileViewer from "react-native-file-viewer";
 import AnimatedSplash from "./SplashScreen";
 import CallKeepService from "./CallKeepService";
-import { DeviceEventEmitter } from "react-native";
 import messaging, {
   FirebaseMessagingTypes,
 } from "@react-native-firebase/messaging";
+import VoipPushNotification from "react-native-voip-push-notification";
 
 const APP_URL = "https://liberdus.com/dev/";
 
@@ -44,242 +44,6 @@ interface APP_PARAMS {
   expoPushToken?: string;
   voipToken?: string;
   fcmToken?: string;
-}
-
-interface CallData {
-  callerName?: string;
-  callerImage?: string;
-  from?: string;
-  to?: string;
-  notificationData?: any;
-}
-
-// Background message handler for Firebase (when app is killed or backgrounded)
-// This must be set at module level, outside of any component
-try {
-  messaging().setBackgroundMessageHandler(
-    async (remoteMessage: FirebaseMessagingTypes.RemoteMessage) => {
-      console.log("📱 FCM background message received:", remoteMessage);
-
-      // Handle high priority data messages for calls
-      if (remoteMessage.data) {
-        const messageType =
-          remoteMessage.data.type || remoteMessage.data.messageType;
-        const isCallMessage =
-          messageType === "call" || messageType === "incoming_call";
-
-        if (isCallMessage) {
-          console.log("📞 Processing call message in background handler");
-
-          const callerName =
-            remoteMessage.data.callerName ||
-            remoteMessage.data.from ||
-            "Unknown Caller";
-          const callUUID =
-            remoteMessage.data.callUUID ||
-            remoteMessage.data.callId ||
-            require("react-native-uuid").v4();
-
-          console.log(
-            `📞 Background: Processing call from ${callerName} (${callUUID})`
-          );
-
-          try {
-            // Strategy 1: Try to use the correct native method for background calls
-            console.log("🔄 Background: Attempting native displayIncomingCall");
-
-            const { NativeModules } = require("react-native");
-            const RNCallKeepModule = NativeModules.RNCallKeep;
-
-            if (RNCallKeepModule && RNCallKeepModule.displayIncomingCall) {
-              console.log(
-                "📞 Background: Using native displayIncomingCall with proper setup"
-              );
-
-              // First ensure CallKeep is set up to handle events
-              try {
-                const RNCallKeep = require("react-native-callkeep").default;
-                const options = {
-                  ios: {
-                    appName: "Liberdus",
-                  },
-                  android: {
-                    alertTitle: "Phone call permissions",
-                    alertDescription:
-                      "This application needs access to manage phone calls",
-                    cancelButton: "Cancel",
-                    okButton: "OK",
-                    additionalPermissions: [],
-                    selfManaged: false,
-                    foregroundService: {
-                      channelId: "com.liberdus.callkeep",
-                      channelName: "Liberdus Background Call Service",
-                      notificationTitle: "Liberdus is handling calls",
-                      notificationIcon: "ic_launcher",
-                    },
-                  },
-                };
-
-                console.log(
-                  "🔧 Background: Setting up CallKeep for event handling"
-                );
-                RNCallKeep.setup(options);
-
-                // Register events so they work when call is answered
-                RNCallKeep.addEventListener(
-                  "answerCall",
-                  ({ callUUID }: { callUUID: string }) => {
-                    console.log(
-                      "📞 Background: Call answered event received:",
-                      callUUID
-                    );
-
-                    // Immediately try to bring app to foreground and end call
-                    try {
-                      console.log("🚀 Background: Bringing app to foreground");
-                      RNCallKeep.backToForeground();
-
-                      // Immediate call ending attempts (no setTimeout in background context)
-                      console.log(
-                        "📞 Background: Immediate call end attempt 1"
-                      );
-                      try {
-                        RNCallKeep.endCall(callUUID);
-                        console.log(
-                          "✅ Background: Immediate call end successful"
-                        );
-                      } catch (endError) {
-                        console.log(
-                          "⚠️ Background: Immediate call end failed:",
-                          endError
-                        );
-
-                        // Try endAllCalls as immediate fallback
-                        try {
-                          console.log(
-                            "📞 Background: Trying endAllCalls fallback"
-                          );
-                          RNCallKeep.endAllCalls();
-                          console.log("✅ Background: endAllCalls successful");
-                        } catch (allError) {
-                          console.log(
-                            "⚠️ Background: endAllCalls failed:",
-                            allError
-                          );
-                        }
-                      }
-                    } catch (error) {
-                      console.error(
-                        "❌ Background: Failed to handle answered call:",
-                        error
-                      );
-                    }
-                  }
-                );
-
-                RNCallKeep.addEventListener(
-                  "endCall",
-                  ({ callUUID }: { callUUID: string }) => {
-                    console.log(
-                      "📞 Background: Call ended event received:",
-                      callUUID
-                    );
-                  }
-                );
-
-                console.log(
-                  "✅ Background: CallKeep event handlers registered"
-                );
-              } catch (setupError) {
-                console.log(
-                  "⚠️ Background: CallKeep setup failed:",
-                  setupError
-                );
-              }
-
-              // Now display the call
-              RNCallKeepModule.displayIncomingCall(
-                callUUID,
-                callerName,
-                callerName,
-                false
-              );
-              console.log(
-                "✅ Background: Native displayIncomingCall successful"
-              );
-            } else if (RNCallKeepModule) {
-              // Try alternative approach - trigger the background messaging service
-              console.log(
-                "🔄 Background: Trying to start background messaging service"
-              );
-
-              // Create an intent to start the background service
-              const { NativeModules: NM } = require("react-native");
-              if (NM.IntentLauncher) {
-                const intent = {
-                  action: "io.wazo.callkeep.ACTION_WAKE_APP",
-                  extra: {
-                    callUUID: callUUID,
-                    name: callerName,
-                    handle: callerName,
-                  },
-                };
-                await NM.IntentLauncher.startActivity(intent);
-                console.log("✅ Background: Background service intent sent");
-              } else {
-                throw new Error("No suitable native method found");
-              }
-            } else {
-              throw new Error("RNCallKeep native module not available");
-            }
-          } catch (error) {
-            console.error("❌ Background: Native approaches failed:", error);
-
-            // Strategy 2: Enhanced CallKeepService with better killed app detection
-            try {
-              console.log("🔄 Background: Enhanced CallKeepService fallback");
-              const CallKeepService = require("./CallKeepService").default;
-
-              // For truly killed app, we need to be more aggressive
-              const AppState = require("react-native").AppState;
-              const currentState = AppState.currentState;
-              console.log(`📱 Background: App state is '${currentState}'`);
-
-              if (currentState === "unknown" || currentState === "background") {
-                console.log(
-                  "🔄 Background: App likely killed, using aggressive approach"
-                );
-                // Force immediate processing without waiting for app state
-                await CallKeepService.sendHighPriorityDataMessage({
-                  ...remoteMessage.data,
-                  forceImmediate: true,
-                  fromBackgroundHandler: true,
-                });
-              } else {
-                await CallKeepService.sendHighPriorityDataMessage(
-                  remoteMessage.data
-                );
-              }
-
-              console.log("✅ Background: CallKeepService fallback successful");
-            } catch (serviceError) {
-              console.error(
-                "❌ Background: All strategies failed:",
-                serviceError
-              );
-            }
-          }
-        } else {
-          console.log("📱 Non-call message in background, ignoring");
-        }
-      }
-    }
-  );
-} catch (error) {
-  console.warn(
-    "⚠️ Firebase not initialized yet, background handler will be set up later:",
-    error
-  );
 }
 
 Notifications.setNotificationHandler({
@@ -314,34 +78,6 @@ async function registerNotificationChannels() {
     showBadge: true,
   });
 
-  // Enhanced calls channel for maximum priority
-  await Notifications.setNotificationChannelAsync("calls", {
-    name: "Incoming Calls",
-    importance: Notifications.AndroidImportance.MAX,
-    sound: "default",
-    vibrationPattern: [0, 1000, 500, 1000],
-    lightColor: "#00FF00",
-    lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
-    bypassDnd: true,
-    showBadge: true,
-    enableLights: true,
-    enableVibrate: true,
-  });
-
-  // High priority call notifications for when CallKeep isn't available
-  await Notifications.setNotificationChannelAsync("call-priority", {
-    name: "Priority Call Notifications",
-    importance: Notifications.AndroidImportance.MAX,
-    sound: "default",
-    vibrationPattern: [0, 1000, 500, 1000, 500, 1000],
-    lightColor: "#00FFFF",
-    lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
-    bypassDnd: true,
-    showBadge: true,
-    enableLights: true,
-    enableVibrate: true,
-  });
-
   await Notifications.setNotificationChannelAsync("background", {
     name: "Background Sync",
     importance: Notifications.AndroidImportance.MIN,
@@ -363,6 +99,94 @@ export async function getOrCreateDeviceToken(): Promise<string> {
 
   await AsyncStorage.setItem(DEVICE_TOKEN_KEY, uuid);
   return uuid;
+}
+
+// VoIP Push Token function
+export function getVoIPPushToken(): Promise<string> {
+  return new Promise((resolve, reject) => {
+    if (Platform.OS === "ios") {
+      const timeout = setTimeout(() => {
+        reject(new Error("VoIP token request timed out"));
+      }, 10000); // 10 second timeout
+
+      const handleRegister = (token: string) => {
+        clearTimeout(timeout);
+        VoipPushNotification.removeEventListener("register");
+        resolve(token);
+      };
+
+      VoipPushNotification.addEventListener("register", handleRegister);
+      VoipPushNotification.registerVoipToken();
+    } else {
+      reject(new Error("VoIP push notifications are only available on iOS"));
+    }
+  });
+}
+
+// VoIP Push Notification Setup
+export function setupVoIPPushNotifications(): void {
+  if (Platform.OS !== "ios") return;
+
+  console.log("Setting up VoIP push notifications with enhanced handling");
+
+  try {
+    VoipPushNotification.addEventListener(
+      "notification",
+      async (notification: any) => {
+        console.log("🔔 VoIP push notification received:", notification);
+
+        const appState = AppState.currentState;
+        console.log("📱 App state when VoIP received:", appState);
+
+        // Display incoming call through CallKeepService
+        try {
+          await CallKeepService.handleIncomingCall(notification);
+
+          console.log("✅ VoIP call displayed successfully:");
+        } catch (error) {
+          console.error("❌ Failed to display VoIP call:", error);
+        }
+      }
+    );
+
+    VoipPushNotification.addEventListener(
+      "didLoadWithEvents",
+      (events: any[]) => {
+        console.log("📋 VoIP push events loaded:", events);
+        // Process any queued VoIP notifications
+        events.forEach((event, index) => {
+          console.log(`🔄 Processing queued VoIP event ${index}:`, event);
+          // Re-trigger notification handling for queued events
+          if (event.type === "notification" && event.data) {
+            setTimeout(() => {
+              VoipPushNotification.onVoipNotificationCompleted(event.callUUID);
+            }, 1000 * (index + 1)); // Stagger processing
+          }
+        });
+      }
+    );
+
+    // Request VoIP push token
+    VoipPushNotification.registerVoipToken();
+    console.log("📡 VoIP push token registration initiated");
+  } catch (error) {
+    console.error("❌ Failed to setup VoIP push notifications:", error);
+    throw error;
+  }
+}
+
+// VoIP Push Notification Cleanup
+export function cleanupVoIPPushNotifications(): void {
+  if (Platform.OS !== "ios") return;
+
+  try {
+    VoipPushNotification.removeEventListener("register");
+    VoipPushNotification.removeEventListener("notification");
+    VoipPushNotification.removeEventListener("didLoadWithEvents");
+    console.log("🧹 VoIP push notification listeners cleaned up");
+  } catch (error) {
+    console.warn("⚠️ Failed to cleanup VoIP listeners:", error);
+  }
 }
 
 // Check if file can be viewed by FileViewer
@@ -549,13 +373,16 @@ const App: React.FC = () => {
         await CallKeepService.setup();
         console.log("✅ CallKeep initialized successfully");
 
-        // Get VoIP push token if on iOS
+        // Setup VoIP push notifications and get token if on iOS
         if (Platform.OS === "ios") {
           try {
+            // Setup VoIP push notifications
+            setupVoIPPushNotifications();
+
             // Add a delay to ensure CallKeep setup is complete
             setTimeout(async () => {
               try {
-                const voipToken = await CallKeepService.getVoIPPushToken();
+                const voipToken = await getVoIPPushToken();
                 setVoipToken(voipToken);
                 console.log("📱 VoIP Push Token:", voipToken);
               } catch (error) {
@@ -566,10 +393,7 @@ const App: React.FC = () => {
               }
             }, 1000);
           } catch (error) {
-            console.warn(
-              "⚠️ VoIP token setup failed, continuing without it:",
-              error
-            );
+            console.warn("⚠️ VoIP setup failed, continuing without it:", error);
           }
         }
       } catch (error) {
@@ -656,15 +480,38 @@ const App: React.FC = () => {
         async (remoteMessage: FirebaseMessagingTypes.RemoteMessage) => {
           console.log("📱 FCM message received in foreground:", remoteMessage);
 
-          // Handle high priority data messages for calls
-          if (remoteMessage.data) {
+          // Check if this is a call message
+          const messageType = remoteMessage.data?.type;
+          const isCallMessage = messageType === "incoming_call";
+
+          if (isCallMessage) {
+            // Handle call message
             try {
-              await CallKeepService.sendHighPriorityDataMessage(
-                remoteMessage.data
-              );
+              await CallKeepService.handleIncomingCall(remoteMessage.data);
             } catch (error) {
-              console.error("❌ Error processing foreground message:", error);
+              console.error(
+                "❌ Error processing foreground call message:",
+                error
+              );
             }
+          } else {
+            // Handle regular notifications
+            console.log("📱 Regular FCM notification in foreground");
+
+            // Create a local notification to display in notification panel
+            const notificationTitle =
+              remoteMessage.notification?.title || "New Message";
+            const notificationBody = remoteMessage.notification?.body || "";
+
+            await Notifications.scheduleNotificationAsync({
+              content: {
+                title: notificationTitle,
+                body: notificationBody,
+                data: remoteMessage.data || {},
+                sound: "default",
+              },
+              trigger: null,
+            });
           }
         }
       );
@@ -676,14 +523,6 @@ const App: React.FC = () => {
             "📱 FCM message opened app from background:",
             remoteMessage
           );
-
-          if (remoteMessage.data) {
-            CallKeepService.sendHighPriorityDataMessage(
-              remoteMessage.data
-            ).catch((error) => {
-              console.error("❌ Error processing opened app message:", error);
-            });
-          }
         }
       );
 
@@ -696,17 +535,6 @@ const App: React.FC = () => {
               "📱 FCM message opened app from killed state:",
               remoteMessage
             );
-
-            if (remoteMessage.data) {
-              CallKeepService.sendHighPriorityDataMessage(
-                remoteMessage.data
-              ).catch((error) => {
-                console.error(
-                  "❌ Error processing killed state message:",
-                  error
-                );
-              });
-            }
           }
         });
 
