@@ -2,13 +2,11 @@
   "expo": {
     "name": "Liberdus",
     "slug": "liberdus",
-    "version": "2025.0815.1112",
+    "version": "2025.0826.1704",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "assetBundlePatterns": [
-      "**/*"
-    ],
+    "assetBundlePatterns": ["**/*"],
     "ios": {
       "buildNumber": "6",
       "supportsTablet": false,
@@ -20,8 +18,6 @@
         "UIBackgroundModes": [
           "audio",
           "voip",
-          "background-processing",
-          "background-fetch",
           "remote-notification"
         ],
         "NSAppTransportSecurity": {
@@ -78,9 +74,7 @@
       "enabled": false
     },
     "plugins": [
-      [
-        "expo-notifications"
-      ],
+      ["expo-notifications"],
       [
         "@config-plugins/react-native-callkeep",
         {
@@ -88,6 +82,14 @@
           "supportsVideo": false,
           "includesCallsInRecents": true,
           "imageName": "icon"
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "useFrameworks": "static"
+          }
         }
       ]
     ]

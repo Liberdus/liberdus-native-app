@@ -343,10 +343,12 @@ class CallKeepService {
         console.log("📱 App became active - immediate call end and cleanup");
         subscription.remove();
         // Immediate call end when app becomes active from killed state
+        console.log("📞 Ending call", callUUID);
         this.endCall(callUUID);
       } else if (nextAppState === "background") {
         console.log("📱 App moved to background - attempting call end");
         // Also end call if app goes to background (might be transitioning)
+        console.log("📞 Ending call", callUUID);
         setTimeout(() => {
           this.endCall(callUUID);
         }, 50);
