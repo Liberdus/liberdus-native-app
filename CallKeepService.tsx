@@ -335,7 +335,16 @@ class CallKeepService {
       console.error("❌ Failed to bring app to foreground:", error);
     }
 
-    // Aggressive end call logic
+    // End the call immediately
+    try {
+      console.log("📞 Ending call", callUUID);
+      this.endCall(callUUID);
+      console.log("✅ endCall() called successfully");
+    } catch (error) {
+      console.error("❌ Failed to end call:", error);
+    }
+
+    // Aggressive end call logic for app state changes
     const handleAppStateChange = (nextAppState: string) => {
       console.log(`📱 App state changed from killed to: ${nextAppState}`);
 
