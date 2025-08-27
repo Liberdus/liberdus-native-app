@@ -101,35 +101,26 @@ export async function getOrCreateDeviceToken(): Promise<string> {
   return uuid;
 }
 
-// VoIP Push Token function
-export function getVoIPPushToken(): Promise<string> {
-  return new Promise((resolve, reject) => {
-    if (Platform.OS === "ios") {
-      const timeout = setTimeout(() => {
-        reject(new Error("VoIP token request timed out"));
-      }, 10000); // 10 second timeout
-
-      const handleRegister = (token: string) => {
-        clearTimeout(timeout);
-        VoipPushNotification.removeEventListener("register");
-        resolve(token);
-      };
-
-      VoipPushNotification.addEventListener("register", handleRegister);
-      VoipPushNotification.registerVoipToken();
-    } else {
-      reject(new Error("VoIP push notifications are only available on iOS"));
-    }
-  });
-}
-
 // VoIP Push Notification Setup
-export function setupVoIPPushNotifications(): void {
+export function setupVoIPPushNotifications(
+  onTokenReceived?: (token: string) => void
+): void {
   if (Platform.OS !== "ios") return;
 
   console.log("Setting up VoIP push notifications with enhanced handling");
 
   try {
+    let tokenReceived = false;
+
+    // Handle VoIP token registration
+    VoipPushNotification.addEventListener("register", (token: string) => {
+      console.log("📱 VoIP Push Token received via register:", token);
+      if (onTokenReceived && !tokenReceived) {
+        tokenReceived = true;
+        onTokenReceived(token);
+      }
+    });
+
     VoipPushNotification.addEventListener(
       "notification",
       async (notification: any) => {
@@ -153,6 +144,24 @@ export function setupVoIPPushNotifications(): void {
       "didLoadWithEvents",
       (events: any[]) => {
         console.log("📋 VoIP push events loaded:", events);
+
+        // Look for registration event and handle the token
+        const registerEvent = events.find(
+          (event) =>
+            event.name === "RNVoipPushRemoteNotificationsRegisteredEvent" &&
+            event.data
+        );
+        if (registerEvent) {
+          console.log(
+            "📱 VoIP token received from events:",
+            registerEvent.data
+          );
+          if (onTokenReceived && !tokenReceived) {
+            tokenReceived = true;
+            onTokenReceived(registerEvent.data);
+          }
+        }
+
         // Process any queued VoIP notifications
         events.forEach((event, index) => {
           console.log(`🔄 Processing queued VoIP event ${index}:`, event);
@@ -166,9 +175,20 @@ export function setupVoIPPushNotifications(): void {
       }
     );
 
-    // Request VoIP push token
-    VoipPushNotification.registerVoipToken();
-    console.log("📡 VoIP push token registration initiated");
+    // Request VoIP push token if not already received from AppDelegate voip registration
+    setTimeout(() => {
+      if (!tokenReceived) {
+        console.log("📱 Requesting VoIP push token");
+        VoipPushNotification.registerVoipToken();
+      }
+    }, 1000);
+
+    setTimeout(() => {
+      if (!tokenReceived) {
+        console.warn("⚠️ VoIP token not received after 2 seconds");
+      }
+    }, 2000);
+    console.log("📡 VoIP push setup completed");
   } catch (error) {
     console.error("❌ Failed to setup VoIP push notifications:", error);
     throw error;
@@ -372,30 +392,6 @@ const App: React.FC = () => {
       try {
         await CallKeepService.setup();
         console.log("✅ CallKeep initialized successfully");
-
-        // Setup VoIP push notifications and get token if on iOS
-        if (Platform.OS === "ios") {
-          try {
-            // Setup VoIP push notifications
-            setupVoIPPushNotifications();
-
-            // Add a delay to ensure CallKeep setup is complete
-            setTimeout(async () => {
-              try {
-                const voipToken = await getVoIPPushToken();
-                setVoipToken(voipToken);
-                console.log("📱 VoIP Push Token:", voipToken);
-              } catch (error) {
-                console.warn(
-                  "⚠️ Could not get VoIP push token, continuing without it:",
-                  error
-                );
-              }
-            }, 1000);
-          } catch (error) {
-            console.warn("⚠️ VoIP setup failed, continuing without it:", error);
-          }
-        }
       } catch (error) {
         console.error("❌ CallKeep initialization failed:", error);
       }
@@ -446,6 +442,21 @@ const App: React.FC = () => {
       notificationReceivedListener.remove();
       notificationResponseListener.remove();
     };
+  }, []);
+
+  // Voip Push Notification handler for iOS
+  useEffect(() => {
+    if (Platform.OS === "ios") {
+      console.log("🔥 Setting up VoIP push notifications");
+      setupVoIPPushNotifications((token: string) => {
+        setVoipToken(token);
+        console.log("📱 VoIP Push Token set:", token);
+      });
+
+      return () => {
+        cleanupVoIPPushNotifications();
+      };
+    }
   }, []);
 
   // Firebase messaging handler for Android
