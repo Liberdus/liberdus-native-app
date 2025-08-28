@@ -2,71 +2,47 @@ import RNCallKeep from "react-native-callkeep";
 import { Platform, AppState } from "react-native";
 import uuid from "react-native-uuid";
 
-export interface CallKeepOptions {
-  ios: {
-    appName: string;
-    maximumCallGroups: string;
-    maximumCallsPerCallGroup: string;
-    supportsVideo: boolean;
-    includesCallsInRecents: boolean;
-  };
-  android: {
-    alertTitle: string;
-    alertDescription: string;
-    cancelButton: string;
-    okButton: string;
-    imageName?: string;
-    additionalPermissions: string[];
-    selfManaged: boolean;
-    foregroundService?: {
-      channelId: string;
-      channelName: string;
-      notificationTitle: string;
-      notificationIcon: string;
-    };
-  };
-}
-
 export interface CallData {
   callerName: string;
   callId: string;
   hasVideo: boolean;
 }
 
+export const callKeepOptions = {
+  ios: {
+    appName: "Liberdus",
+    maximumCallGroups: "1",
+    maximumCallsPerCallGroup: "1",
+    supportsVideo: false,
+    includesCallsInRecents: true,
+  },
+  android: {
+    alertTitle: "Phone call permissions",
+    alertDescription: "This application needs access to manage phone calls",
+    cancelButton: "Cancel",
+    okButton: "OK",
+    additionalPermissions: [],
+    selfManaged: false,
+    // Add foreground service configuration for Android 10+
+    foregroundService: {
+      channelId: "com.liberdus.callkeep",
+      channelName: "Liberdus Background Call Service",
+      notificationTitle: "Liberdus is handling calls",
+      notificationIcon: "ic_launcher", // Uses your app icon
+    },
+  },
+};
+
 class CallKeepService {
   public isSetup: boolean = false;
   private currentCallUUID: string | null = null;
-  private callKeepOptions: CallKeepOptions = {
-    ios: {
-      appName: "Liberdus",
-      maximumCallGroups: "1",
-      maximumCallsPerCallGroup: "1",
-      supportsVideo: false,
-      includesCallsInRecents: true,
-    },
-    android: {
-      alertTitle: "Phone call permissions",
-      alertDescription: "This application needs access to manage phone calls",
-      cancelButton: "Cancel",
-      okButton: "OK",
-      additionalPermissions: [],
-      selfManaged: false,
-      // Add foreground service configuration for Android 10+
-      foregroundService: {
-        channelId: "com.liberdus.callkeep",
-        channelName: "Liberdus Background Call Service",
-        notificationTitle: "Liberdus is handling calls",
-        notificationIcon: "ic_launcher", // Uses your app icon
-      },
-    },
-  };
 
   public async setup(): Promise<void> {
     if (this.isSetup) return;
 
     try {
       console.log(`🔧 Starting CallKeep setup for ${Platform.OS}...`);
-      await RNCallKeep.setup(this.callKeepOptions);
+      await RNCallKeep.setup(callKeepOptions);
       this.setupEventListeners();
 
       // Platform-specific permissions and setup
