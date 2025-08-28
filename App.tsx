@@ -25,12 +25,19 @@ import * as Sharing from "expo-sharing";
 import FileViewer from "react-native-file-viewer";
 import AnimatedSplash from "./SplashScreen";
 import CallKeepService from "./CallKeepService";
-import messaging, {
-  FirebaseMessagingTypes,
+import {
+  getMessaging,
+  requestPermission,
+  getToken,
+  onMessage,
+  onNotificationOpenedApp,
+  getInitialNotification,
+  AuthorizationStatus,
 } from "@react-native-firebase/messaging";
+import type { FirebaseMessagingTypes } from "@react-native-firebase/messaging";
 import VoipPushNotification from "react-native-voip-push-notification";
 
-const APP_URL = "https://liberdus.com/dev/";
+const APP_URL = "https://liberdus.com/test/";
 
 // Storage keys
 const DEVICE_TOKEN_KEY = "device_token";
@@ -465,17 +472,18 @@ const App: React.FC = () => {
       console.log("🔥 Setting up Firebase messaging for Android");
 
       // Request permission for Android notifications
-      const requestPermission = async () => {
-        const authStatus = await messaging().requestPermission();
+      const requestFirebasePermission = async () => {
+        const messagingInstance = getMessaging();
+        const authStatus = await requestPermission(messagingInstance);
         const enabled =
-          authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
-          authStatus === messaging.AuthorizationStatus.PROVISIONAL;
+          authStatus === AuthorizationStatus.AUTHORIZED ||
+          authStatus === AuthorizationStatus.PROVISIONAL;
 
         if (enabled) {
           console.log("📱 Firebase messaging permission granted:", authStatus);
           // Get FCM token
           try {
-            const fcmToken = await messaging().getToken();
+            const fcmToken = await getToken(messagingInstance);
             console.log("🔑 FCM Token:", fcmToken);
             setFcmToken(fcmToken);
           } catch (error) {
@@ -484,10 +492,12 @@ const App: React.FC = () => {
         }
       };
 
-      requestPermission();
+      requestFirebasePermission();
 
       // Handle foreground messages
-      const unsubscribeForeground = messaging().onMessage(
+      const messagingInstance = getMessaging();
+      const unsubscribeForeground = onMessage(
+        messagingInstance,
         async (remoteMessage: FirebaseMessagingTypes.RemoteMessage) => {
           console.log("📱 FCM message received in foreground:", remoteMessage);
 
@@ -528,7 +538,8 @@ const App: React.FC = () => {
       );
 
       // Handle background messages (when app is backgrounded but not killed)
-      messaging().onNotificationOpenedApp(
+      onNotificationOpenedApp(
+        messagingInstance,
         (remoteMessage: FirebaseMessagingTypes.RemoteMessage) => {
           console.log(
             "📱 FCM message opened app from background:",
@@ -538,16 +549,16 @@ const App: React.FC = () => {
       );
 
       // Handle messages when app is completely killed and opened by notification
-      messaging()
-        .getInitialNotification()
-        .then((remoteMessage: FirebaseMessagingTypes.RemoteMessage | null) => {
+      getInitialNotification(messagingInstance).then(
+        (remoteMessage: FirebaseMessagingTypes.RemoteMessage | null) => {
           if (remoteMessage) {
             console.log(
               "📱 FCM message opened app from killed state:",
               remoteMessage
             );
           }
-        });
+        }
+      );
 
       return unsubscribeForeground;
     }
@@ -560,11 +571,6 @@ const App: React.FC = () => {
 
   const registerForPushNotificationsAsync = async () => {
     try {
-      if (!Device.isDevice) {
-        Alert.alert("Error", "Must use physical device for Push Notifications");
-        return false;
-      }
-
       const { status: existingStatus } =
         await Notifications.getPermissionsAsync();
       let finalStatus = existingStatus;
@@ -814,7 +820,7 @@ const App: React.FC = () => {
     }
   };
 
-  //   const injectedJavaScript = `
+  // const injectedJavaScript = `
   //   (function() {
   //     const sendLog = (level, args) => {
   //       try {
@@ -1014,6 +1020,10 @@ const App: React.FC = () => {
               style={styles.webView}
               allowsInlineMediaPlayback={true} // ✅ Required for <video> on iOS
               mediaPlaybackRequiresUserAction={false} // ✅ Let camera start automatically
+              // mediaCapturePermissionGrantType={"grant"} // ✅ Prompt for media capture permissions
+              // allowsProtectedMedia={true} // ✅ Allow protected media content
+              // allowsAirPlayForMediaPlayback={true} // ✅ Allow media playback features
+              // allowsPictureInPictureMediaPlayback={true} // ✅ Enable media features
               // allowsFullscreenVideo // On Android, this makes Keyboard to cover the input box on focus
               useWebView2
               onError={(syntheticEvent) => {
@@ -1055,7 +1065,7 @@ const App: React.FC = () => {
               }}
               // Needed for iOS to make `onShouldStartLoadWithRequest` work
               setSupportMultipleWindows={false}
-              // injectedJavaScript={injectedJavaScript} //
+              // injectedJavaScript={injectedJavaScript} // Can be used for logging the webview console
               onMessage={handleWebViewMessage}
               // Bounce effect on iOS
               bounces={true}

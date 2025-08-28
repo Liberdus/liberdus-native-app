@@ -15,11 +15,7 @@
         "ITSAppUsesNonExemptEncryption": false,
         "NSCameraUsageDescription": "Camera access is needed to scan QR codes and capture photos or videos to share in messages.",
         "NSMicrophoneUsageDescription": "Microphone access is needed to record audio for videos you share in messages.",
-        "UIBackgroundModes": [
-          "audio",
-          "voip",
-          "remote-notification"
-        ],
+        "UIBackgroundModes": ["audio", "voip", "remote-notification"],
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true
         },
@@ -46,8 +42,6 @@
         "android.permission.SYSTEM_ALERT_WINDOW",
         "android.permission.USE_FULL_SCREEN_INTENT",
         "android.permission.MANAGE_OWN_CALLS",
-        "com.android.voicemail.permission.ADD_VOICEMAIL",
-        "android.permission.CALL_PHONE",
         "android.permission.READ_PHONE_STATE",
         "android.permission.DISABLE_KEYGUARD",
         "android.permission.TURN_SCREEN_ON",
@@ -74,6 +68,12 @@
       "enabled": false
     },
     "plugins": [
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Allow Liberdus to access your microphone."
+        }
+      ],
       ["expo-notifications"],
       [
         "@config-plugins/react-native-callkeep",

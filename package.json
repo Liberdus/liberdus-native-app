@@ -22,6 +22,7 @@
     "@react-native-firebase/messaging": "^23.1.2",
     "axios": "^1.10.0",
     "expo": "~53.0.15",
+    "expo-audio": "^0.4.8",
     "expo-build-properties": "~0.14.8",
     "expo-crypto": "~14.1.5",
     "expo-dev-client": "~5.2.4",
