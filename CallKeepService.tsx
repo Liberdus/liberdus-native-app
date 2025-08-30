@@ -37,18 +37,21 @@ class CallKeepService {
   public isSetup: boolean = false;
   private currentCallUUID: string | null = null;
 
-  public async setup(): Promise<void> {
+  public async setup(
+    appState: "active" | "background" = "active"
+  ): Promise<void> {
     if (this.isSetup) return;
 
     try {
       console.log(`🔧 Starting CallKeep setup for ${Platform.OS}...`);
       await RNCallKeep.setup(callKeepOptions);
+      if (Platform.OS === "android") RNCallKeep.setAvailable(true);
       this.setupEventListeners();
 
       // Platform-specific permissions and setup
-      if (Platform.OS === "ios") {
+      if (Platform.OS === "ios" && appState === "active") {
         await this.requestIOSPermissions();
-      } else if (Platform.OS === "android") {
+      } else if (Platform.OS === "android" && appState === "active") {
         // Android-specific setup
         console.log("🤖 Setting up Android-specific CallKeep features...");
         try {
@@ -132,11 +135,10 @@ class CallKeepService {
     this.currentCallUUID = null;
   }
 
-  public async handleIncomingCall(data: any): Promise<void> {
+  public handleIncomingCall(data: CallData): void {
     try {
       const callerName = data.callerName || "Unknown Caller";
-      // const callUUID = data.callId || (uuid.v4() as string);
-      const callUUID = uuid.v4() as string;
+      const callUUID = data.callId;
 
       console.log("📞 Handling Incoming Call", {
         callerName,
@@ -145,21 +147,6 @@ class CallKeepService {
 
       // Store call data for handling
       this.currentCallUUID = callUUID;
-
-      // Standard flow for all app states
-      if (!this.isSetup) {
-        console.log("🔧 CallKeep not setup, initializing...");
-        try {
-          await this.setup();
-          console.log("✅ CallKeep setup completed during call handling");
-        } catch (setupError) {
-          console.error(
-            "❌ Failed to setup CallKeep during call handling:",
-            setupError
-          );
-          throw setupError;
-        }
-      }
 
       this.displayIncomingCall(callerName, callUUID);
       console.log("✅ Call displayed successfully");
@@ -345,11 +332,11 @@ class CallKeepService {
       handleAppStateChange
     );
 
-    // Shorter cleanup timeout since we want faster response
+    // Cleanup timeout
     setTimeout(() => {
       subscription.remove();
-      console.log("🔄 App state listener cleaned up after 5 seconds");
-    }, 5000);
+      console.log("🔄 App state listener cleaned up after 2 seconds");
+    }, 2000);
   };
 
   private onEndCall = ({ callUUID }: { callUUID: string }): void => {
