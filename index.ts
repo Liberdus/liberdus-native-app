@@ -5,10 +5,9 @@ import {
   setBackgroundMessageHandler,
 } from "@react-native-firebase/messaging";
 import type { FirebaseMessagingTypes } from "@react-native-firebase/messaging";
-import RNCallKeep from "react-native-callkeep";
-import uuid from "react-native-uuid";
 import App from "./App";
-import { callKeepOptions } from "./CallKeepService";
+import { CallData, callKeepOptions } from "./CallKeepService";
+import RNCallKeep from "react-native-callkeep";
 
 // Background message handler for Firebase (when app is killed or backgrounded)
 // This must be set at module level, outside of any component
@@ -22,122 +21,123 @@ if (Platform.OS == "android") {
         console.log("📱 FCM background message received:", remoteMessage);
 
         // Handle high priority data messages for calls
-        if (remoteMessage.data) {
-          const isCallMessage = remoteMessage.data.type === "incoming_call";
+        if (!remoteMessage.data) {
+          console.log("📱 Background: No data in message, ignoring");
+          return;
+        }
+        const isCallMessage = remoteMessage.data?.type === "incoming_call";
 
-          if (isCallMessage) {
-            console.log("📞 Processing call message in background handler");
+        if (!isCallMessage) {
+          console.log("📱 Background: Non-call message, ignoring");
+          return;
+        }
 
-            const callerName =
-              remoteMessage.data.callerName || "Unknown Caller";
-            const callUUID = remoteMessage.data.callId || (uuid.v4() as string);
+        try {
+          const callData = remoteMessage.data as unknown as CallData;
+          const callerName = callData.callerName || "Unknown Caller";
+          const callUUID = callData.callId as string;
 
-            console.log(
-              `📞 Background: Processing call from ${callerName} (${callUUID})`
-            );
+          // // Display call using callKeepService [ NOT WORKING ]
+          // try {
+          //   CallKeepService.setup("background");
+          //   CallKeepService.handleIncomingCall(callData);
+          //   console.log("✅ Call displayed successfully via CallKeepService");
+          //   return;
+          // } catch (error) {
+          //   console.error(
+          //     "❌ Failed to display incoming call via CallKeepService:",
+          //     error
+          //   );
+          // }
 
-            try {
-              console.log(
-                "🔄 Background: Attempting native displayIncomingCall"
+          console.log(
+            `📞 Background: Processing call from ${callerName} (${callUUID})`
+          );
+
+          // Attempt to display call using native module
+          try {
+            console.log("🔄 Background: Attempting native displayIncomingCall");
+
+            const RNCallKeepModule = NativeModules.RNCallKeep;
+
+            if (RNCallKeepModule && RNCallKeepModule.displayIncomingCall) {
+              // Setup RNCallKeep [ THIS HELPS IN BRINGING APP TO FOREGROUND WHEN CALL ANSWERED ]
+              RNCallKeep.setup(callKeepOptions);
+              RNCallKeep.setAvailable(true);
+
+              // Register event handlers
+              RNCallKeep.addEventListener(
+                "answerCall",
+                ({ callUUID }: { callUUID: string }) => {
+                  console.log(
+                    "📞 Background: Call answered event received:",
+                    callUUID
+                  );
+
+                  try {
+                    console.log("🚀 Background: Bringing app to foreground");
+                    RNCallKeep.backToForeground();
+
+                    console.log("📞 Background: Ending call immediately");
+                    RNCallKeep.endCall(callUUID);
+                    console.log("✅ Background: Call ended successfully");
+                  } catch (endError) {
+                    console.log(
+                      "⚠️ Background: Call end failed, trying endAllCalls:",
+                      endError
+                    );
+
+                    try {
+                      RNCallKeep.endAllCalls();
+                      console.log("✅ Background: endAllCalls successful");
+                    } catch (allError) {
+                      console.log(
+                        "❌ Background: endAllCalls failed:",
+                        allError
+                      );
+                    }
+                  }
+                }
               );
 
-              const RNCallKeepModule = NativeModules.RNCallKeep;
-
-              if (RNCallKeepModule && RNCallKeepModule.displayIncomingCall) {
-                console.log(
-                  "📞 Background: Using native displayIncomingCall with proper setup"
-                );
-
-                // Set up CallKeep with proper configuration
-                try {
+              RNCallKeep.addEventListener(
+                "endCall",
+                ({ callUUID }: { callUUID: string }) => {
                   console.log(
-                    "🔧 Background: Setting up CallKeep for event handling"
-                  );
-                  RNCallKeep.setup(callKeepOptions);
-
-                  // Register event handlers
-                  RNCallKeep.addEventListener(
-                    "answerCall",
-                    ({ callUUID }: { callUUID: string }) => {
-                      console.log(
-                        "📞 Background: Call answered event received:",
-                        callUUID
-                      );
-
-                      try {
-                        console.log(
-                          "🚀 Background: Bringing app to foreground"
-                        );
-                        RNCallKeep.backToForeground();
-
-                        console.log("📞 Background: Ending call immediately");
-                        RNCallKeep.endCall(callUUID);
-                        console.log("✅ Background: Call ended successfully");
-                      } catch (endError) {
-                        console.log(
-                          "⚠️ Background: Call end failed, trying endAllCalls:",
-                          endError
-                        );
-
-                        try {
-                          RNCallKeep.endAllCalls();
-                          console.log("✅ Background: endAllCalls successful");
-                        } catch (allError) {
-                          console.log(
-                            "❌ Background: endAllCalls failed:",
-                            allError
-                          );
-                        }
-                      }
-                    }
-                  );
-
-                  RNCallKeep.addEventListener(
-                    "endCall",
-                    ({ callUUID }: { callUUID: string }) => {
-                      console.log(
-                        "📞 Background: Call ended event received:",
-                        callUUID
-                      );
-                    }
-                  );
-
-                  console.log(
-                    "✅ Background: CallKeep event handlers registered"
-                  );
-                } catch (setupError) {
-                  console.log(
-                    "⚠️ Background: CallKeep setup failed:",
-                    setupError
+                    "📞 Background: Call ended event received:",
+                    callUUID
                   );
                 }
+              );
 
-                // Display the incoming call
-                RNCallKeepModule.displayIncomingCall(
-                  callUUID,
-                  callerName,
-                  callerName,
-                  false
-                );
-                console.log(
-                  "✅ Background: Native displayIncomingCall successful"
-                );
-              } else {
-                console.error(
-                  "❌ Background: RNCallKeep native module not available"
-                );
-              }
-            } catch (error) {
+              console.log("✅ Background: CallKeep event handlers registered");
+
+              // Use native module to display call (works in background)
+              RNCallKeepModule.displayIncomingCall(
+                callUUID,
+                callerName,
+                callerName,
+                false
+              );
+              console.log(
+                "✅ Background: Native displayIncomingCall successful"
+              );
+            } else {
               console.error(
-                "❌ Background: Failed to display incoming call:",
-                error
+                "❌ Background: RNCallKeep native module not available"
               );
             }
-          } else {
-            console.log("📱 Background: Non-call message, ignoring");
+          } catch (error) {
+            console.error(
+              "❌ Background: Failed to display incoming call via native module:",
+              error
+            );
           }
-        } else {
-          console.log("📱 Background: No data in message");
+        } catch (error) {
+          console.error(
+            "❌ Background: Failed to display incoming call:",
+            error
+          );
         }
       }
     );

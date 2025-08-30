@@ -24,7 +24,7 @@ import * as FileSystem from "expo-file-system";
 import * as Sharing from "expo-sharing";
 import FileViewer from "react-native-file-viewer";
 import AnimatedSplash from "./SplashScreen";
-import CallKeepService from "./CallKeepService";
+import CallKeepService, { CallData } from "./CallKeepService";
 import {
   getMessaging,
   requestPermission,
@@ -508,7 +508,9 @@ const App: React.FC = () => {
           if (isCallMessage) {
             // Handle call message
             try {
-              await CallKeepService.handleIncomingCall(remoteMessage.data);
+              CallKeepService.handleIncomingCall(
+                remoteMessage.data as unknown as CallData
+              );
             } catch (error) {
               console.error(
                 "❌ Error processing foreground call message:",
