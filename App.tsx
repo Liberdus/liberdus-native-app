@@ -174,10 +174,18 @@ export function setupVoIPPushNotifications(
         events.forEach((event, index) => {
           console.log(`🔄 Processing queued VoIP event ${index}:`, event);
           // Complete queued VoIP notification events without showing UI
-          if (event.name === "RNVoipPushRemoteNotificationReceivedEvent" && event.data) {
-            console.log(`📞 Completing queued VoIP notification:`, event.data.callId);
+          if (
+            event.name === "RNVoipPushRemoteNotificationReceivedEvent" &&
+            event.data
+          ) {
+            console.log(
+              `📞 Completing queued VoIP notification:`,
+              event.data.callId
+            );
             setTimeout(() => {
-              VoipPushNotification.onVoipNotificationCompleted(event.data.callId);
+              VoipPushNotification.onVoipNotificationCompleted(
+                event.data.callId
+              );
             }, 1000 * (index + 1)); // Stagger processing
           }
         });
@@ -397,6 +405,13 @@ const App: React.FC = () => {
       await toggleNavBar(showNavBarRef.current);
       await registerNotificationChannels();
 
+      const token = await getOrCreateDeviceToken();
+      console.log("📱 Device Token:", token);
+      setDeviceToken(token);
+
+      const success = await registerForPushNotificationsAsync();
+      console.log("Registered for push notifications:", success);
+
       // Initialize CallKeep
       try {
         await CallKeepService.setup();
@@ -404,18 +419,7 @@ const App: React.FC = () => {
       } catch (error) {
         console.error("❌ CallKeep initialization failed:", error);
       }
-
-      const token = await getOrCreateDeviceToken();
-      console.log("📱 Device Token:", token);
-      setDeviceToken(token);
-
-      const success = await registerForPushNotificationsAsync();
-
-      setTimeout(() => {
-        setHasLaunchedOnce(true);
-      }, 1000);
-
-      console.log("Registered for push notifications:", success);
+      setHasLaunchedOnce(true);
     })();
   }, []);
 
