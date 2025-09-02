@@ -9,6 +9,9 @@ import App from "./App";
 import { CallData, callKeepOptions } from "./CallKeepService";
 import RNCallKeep from "react-native-callkeep";
 
+// Global map to track processed messages
+const processedMessages = new Set<string>();
+
 // Background message handler for Firebase (when app is killed or backgrounded)
 // This must be set at module level, outside of any component
 if (Platform.OS == "android") {
@@ -30,6 +33,25 @@ if (Platform.OS == "android") {
         if (!isCallMessage) {
           console.log("📱 Background: Non-call message, ignoring");
           return;
+        }
+
+        console.log('Processed messages:', processedMessages);
+
+        // Check for duplicate messages using messageId
+        const messageId = remoteMessage.messageId;
+        if (messageId) {
+          if (processedMessages.has(messageId)) {
+            console.log(
+              `📱 Background: Message ${messageId} already processed, ignoring`
+            );
+            return;
+          }
+
+          // Mark message as processed
+          processedMessages.add(messageId);
+          console.log(
+            `📱 Background: Marked message ${messageId} as processed`
+          );
         }
 
         try {
@@ -66,49 +88,56 @@ if (Platform.OS == "android") {
               RNCallKeep.setAvailable(true);
 
               // Register event handlers
-              RNCallKeep.addEventListener(
-                "answerCall",
-                ({ callUUID }: { callUUID: string }) => {
+              const answerCallHandler = ({
+                callUUID,
+              }: {
+                callUUID: string;
+              }) => {
+                console.log(
+                  "📞 Background: Call answered event received:",
+                  callUUID
+                );
+
+                try {
+                  console.log("🚀 Background: Bringing app to foreground");
+                  RNCallKeep.backToForeground();
+
+                  console.log("📞 Background: Ending call immediately");
+                  RNCallKeep.endCall(callUUID);
+                  console.log("✅ Background: Call ended successfully");
+                } catch (endError) {
                   console.log(
-                    "📞 Background: Call answered event received:",
-                    callUUID
+                    "⚠️ Background: Call end failed, trying endAllCalls:",
+                    endError
                   );
 
                   try {
-                    console.log("🚀 Background: Bringing app to foreground");
-                    RNCallKeep.backToForeground();
-
-                    console.log("📞 Background: Ending call immediately");
-                    RNCallKeep.endCall(callUUID);
-                    console.log("✅ Background: Call ended successfully");
-                  } catch (endError) {
-                    console.log(
-                      "⚠️ Background: Call end failed, trying endAllCalls:",
-                      endError
-                    );
-
-                    try {
-                      RNCallKeep.endAllCalls();
-                      console.log("✅ Background: endAllCalls successful");
-                    } catch (allError) {
-                      console.log(
-                        "❌ Background: endAllCalls failed:",
-                        allError
-                      );
-                    }
+                    RNCallKeep.endAllCalls();
+                    console.log("✅ Background: endAllCalls successful");
+                  } catch (allError) {
+                    console.log("❌ Background: endAllCalls failed:", allError);
                   }
                 }
-              );
+              };
 
-              RNCallKeep.addEventListener(
-                "endCall",
-                ({ callUUID }: { callUUID: string }) => {
-                  console.log(
-                    "📞 Background: Call ended event received:",
-                    callUUID
-                  );
-                }
-              );
+              const endCallHandler = ({ callUUID }: { callUUID: string }) => {
+                console.log(
+                  "📞 Background: Call ended event received:",
+                  callUUID
+                );
+
+                cleanUpRNCallKeepHandlers();
+              };
+
+              RNCallKeep.addEventListener("answerCall", answerCallHandler);
+              RNCallKeep.addEventListener("endCall", endCallHandler);
+
+              const cleanUpRNCallKeepHandlers = () => {
+                // Cleanup event listeners after call is handled
+                RNCallKeep.removeEventListener("answerCall");
+                RNCallKeep.removeEventListener("endCall");
+                console.log("🧹 Background: Event listeners cleaned up");
+              };
 
               console.log("✅ Background: CallKeep event handlers registered");
 

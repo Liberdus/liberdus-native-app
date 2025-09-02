@@ -138,7 +138,8 @@ export function setupVoIPPushNotifications(
 
         // Display incoming call through CallKeepService
         try {
-          await CallKeepService.handleIncomingCall(notification);
+          CallKeepService.handleIncomingCall(notification as CallData);
+          VoipPushNotification.onVoipNotificationCompleted(notification.callId);
 
           console.log("✅ VoIP call displayed successfully:");
         } catch (error) {
@@ -172,10 +173,11 @@ export function setupVoIPPushNotifications(
         // Process any queued VoIP notifications
         events.forEach((event, index) => {
           console.log(`🔄 Processing queued VoIP event ${index}:`, event);
-          // Re-trigger notification handling for queued events
-          if (event.type === "notification" && event.data) {
+          // Complete queued VoIP notification events without showing UI
+          if (event.name === "RNVoipPushRemoteNotificationReceivedEvent" && event.data) {
+            console.log(`📞 Completing queued VoIP notification:`, event.data.callId);
             setTimeout(() => {
-              VoipPushNotification.onVoipNotificationCompleted(event.callUUID);
+              VoipPushNotification.onVoipNotificationCompleted(event.data.callId);
             }, 1000 * (index + 1)); // Stagger processing
           }
         });

@@ -298,14 +298,12 @@ class CallKeepService {
       console.error("❌ Failed to bring app to foreground:", error);
     }
 
-    // End the call immediately
-    try {
+    // End the call after 100ms [ This helps the app to come to foreground ]
+    setTimeout(async () => {
       console.log("📞 Ending call", callUUID);
       this.endCall(callUUID);
       console.log("✅ endCall() called successfully");
-    } catch (error) {
-      console.error("❌ Failed to end call:", error);
-    }
+    }, 100);
 
     // Aggressive end call logic for app state changes
     const handleAppStateChange = (nextAppState: string) => {
@@ -315,15 +313,13 @@ class CallKeepService {
         console.log("📱 App became active - immediate call end and cleanup");
         subscription.remove();
         // Immediate call end when app becomes active from killed state
-        console.log("📞 Ending call", callUUID);
+        console.log("📞 Ending call from appState active ", callUUID);
         this.endCall(callUUID);
       } else if (nextAppState === "background") {
         console.log("📱 App moved to background - attempting call end");
         // Also end call if app goes to background (might be transitioning)
-        console.log("📞 Ending call", callUUID);
-        setTimeout(() => {
-          this.endCall(callUUID);
-        }, 50);
+        console.log("📞 Ending call from appState background", callUUID);
+        this.endCall(callUUID);
       }
     };
 
