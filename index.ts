@@ -35,7 +35,10 @@ if (Platform.OS == "android") {
           return;
         }
 
-        console.log('Processed messages:', processedMessages);
+        console.log(
+          ` 📱 Background: Processed messages count: ${processedMessages.size}`,
+          processedMessages
+        );
 
         // Check for duplicate messages using messageId
         const messageId = remoteMessage.messageId;
