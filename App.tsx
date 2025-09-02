@@ -502,7 +502,7 @@ const App: React.FC = () => {
 
       // Handle foreground messages
       const messagingInstance = getMessaging();
-      const unsubscribeForeground = onMessage(
+      const firebaseOnMessageListener = onMessage(
         messagingInstance,
         async (remoteMessage: FirebaseMessagingTypes.RemoteMessage) => {
           console.log("📱 FCM message received in foreground:", remoteMessage);
@@ -546,7 +546,7 @@ const App: React.FC = () => {
       );
 
       // Handle background messages (when app is backgrounded but not killed)
-      onNotificationOpenedApp(
+      const firebaseOnNotificationOpenedAppListener = onNotificationOpenedApp(
         messagingInstance,
         (remoteMessage: FirebaseMessagingTypes.RemoteMessage) => {
           console.log(
@@ -568,7 +568,11 @@ const App: React.FC = () => {
         }
       );
 
-      return unsubscribeForeground;
+      // Cleanup listeners
+      return () => {
+        firebaseOnMessageListener();
+        firebaseOnNotificationOpenedAppListener();
+      };
     }
   }, []);
 

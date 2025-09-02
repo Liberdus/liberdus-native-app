@@ -1,5 +1,6 @@
 import { registerRootComponent } from "expo";
 import { NativeModules, Platform } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   getMessaging,
   setBackgroundMessageHandler,
@@ -9,8 +10,43 @@ import App from "./App";
 import { CallData, callKeepOptions } from "./CallKeepService";
 import RNCallKeep from "react-native-callkeep";
 
-// Global map to track processed messages
-const processedMessages = new Set<string>();
+const MESSAGE_IDS_KEY = "processed_message_ids";
+const MAX_STORED_MESSAGES = 5;
+
+const handleMessageDeduplication = async (
+  messageId: string
+): Promise<boolean> => {
+  // Check if this message was already processed and store if not
+  let storedIds: string[] = [];
+  try {
+    const stored = await AsyncStorage.getItem(MESSAGE_IDS_KEY);
+    storedIds = stored ? JSON.parse(stored) : [];
+  } catch (error) {
+    console.warn("Failed to get stored message IDs:", error);
+  }
+
+  if (storedIds.includes(messageId)) {
+    console.log(
+      `📱 Background: Duplicate message detected (${messageId}), ignoring`
+    );
+    return true; // Message is duplicate
+  }
+
+  // Store messageId to prevent duplicate processing
+  const updatedIds = [messageId, ...storedIds];
+  const limitedIds = updatedIds.slice(0, MAX_STORED_MESSAGES);
+
+  try {
+    await AsyncStorage.setItem(MESSAGE_IDS_KEY, JSON.stringify(limitedIds));
+    console.log(
+      `📝 Stored messageId: ${messageId}, total stored: ${limitedIds.length}`
+    );
+  } catch (error) {
+    console.warn("Failed to store message ID:", error);
+  }
+
+  return false; // Message is not duplicate
+};
 
 // Background message handler for Firebase (when app is killed or backgrounded)
 // This must be set at module level, outside of any component
@@ -35,26 +71,20 @@ if (Platform.OS == "android") {
           return;
         }
 
-        console.log(
-          ` 📱 Background: Processed messages count: ${processedMessages.size}`,
-          processedMessages
-        );
-
         // Check for duplicate messages using messageId
         const messageId = remoteMessage.messageId;
-        if (messageId) {
-          if (processedMessages.has(messageId)) {
-            console.log(
-              `📱 Background: Message ${messageId} already processed, ignoring`
-            );
-            return;
-          }
 
-          // Mark message as processed
-          processedMessages.add(messageId);
-          console.log(
-            `📱 Background: Marked message ${messageId} as processed`
-          );
+        if (!messageId) {
+          console.log("📱 Background: No messageId in message, ignoring");
+          return;
+        }
+        console.log(
+          `📱 Background: Received call message with messageId ${messageId}`
+        );
+
+        // Check for duplicate message and store if not duplicate
+        if (await handleMessageDeduplication(messageId)) {
+          return;
         }
 
         try {
