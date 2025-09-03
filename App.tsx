@@ -8,6 +8,7 @@ import {
   AlertButton,
   Keyboard,
   View,
+  Share,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { AppState } from "react-native";
@@ -361,6 +362,9 @@ const App: React.FC = () => {
    */
   const getPanelNotifications = async () => {
     try {
+      // Add a small delay to ensure notifications have time to appear in the system
+      await new Promise((resolve) => setTimeout(resolve, 200));
+
       const presentedNotifications =
         await Notifications.getPresentedNotificationsAsync();
       console.log(
@@ -379,6 +383,7 @@ const App: React.FC = () => {
       return notificationsData;
     } catch (error) {
       console.error("❌ Failed to get all panel notifications:", error);
+      return [];
     }
   };
 
@@ -933,6 +938,25 @@ const App: React.FC = () => {
         console.log("🗑️ Received clear notifications message");
         await Notifications.setBadgeCountAsync(0);
         await Notifications.dismissAllNotificationsAsync();
+      } else if (data.type === "SHARE_INVITE") {
+        const { url, text, title } = data;
+        console.log("📤 Sharing invite:", { url, text, title });
+        try {
+          await Share.share(
+            {
+              title: title,
+              message: text,
+              url: url,
+            },
+            {
+              dialogTitle: title || "Share Liberdus Invite",
+              subject: title,
+            }
+          );
+          console.log("✅ Invite shared successfully");
+        } catch (error) {
+          console.error("❌ Sharing failed:", error);
+        }
       } else if (data.type === "APP_PARAMS") {
         const appVersion = Constants.expoConfig?.version || "unknown";
         const data: APP_PARAMS = {
