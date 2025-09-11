@@ -291,7 +291,7 @@ const App: React.FC = () => {
           sendMessageToWebView({ type: "foreground" });
           toggleNavBar(showNavBarRef.current);
           // Check if web app is in white screen
-          runWhiteScreenCheck();
+          // runWhiteScreenCheck(); --- Disabled it. Using onContentProcessDidTerminate and onRenderProcessGone to detect white screen instead
         };
         if (appResumeTimer.current !== null) {
           clearTimeout(appResumeTimer.current);
@@ -1114,6 +1114,18 @@ const App: React.FC = () => {
               // Add load start handler
               onLoadStart={() => {
                 console.log("🔄 WebView load started");
+              }}
+              // WHITE SCREEN FIX ON IOS
+              onContentProcessDidTerminate={(syntheticEvent) => {
+                const { nativeEvent } = syntheticEvent;
+                console.warn("❌ Content process terminated", nativeEvent);
+                webViewRef.current?.reload();
+              }}
+              // WHITE SCREEN FIX ON ANDROID
+              onRenderProcessGone={(syntheticEvent) => {
+                const { nativeEvent } = syntheticEvent;
+                console.warn("❌ Render process gone: ", nativeEvent);
+                webViewRef.current?.reload();
               }}
             />
           </View>
