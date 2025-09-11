@@ -64,6 +64,28 @@ Notifications.setNotificationHandler({
 });
 
 async function registerNotificationChannels() {
+  // Register notification categories for both platforms
+  // await Notifications.setNotificationCategoryAsync("CALL_ACTION", [
+  //   {
+  //     identifier: "JOIN_CALL",
+  //     buttonTitle: "Join",
+  //     options: {
+  //       opensAppToForeground: true,
+  //       isAuthenticationRequired: false,
+  //       isDestructive: false,
+  //     },
+  //   },
+  //   {
+  //     identifier: "CANCEL_CALL",
+  //     buttonTitle: "Cancel",
+  //     options: {
+  //       opensAppToForeground: false,
+  //       isAuthenticationRequired: false,
+  //       isDestructive: true,
+  //     },
+  //   },
+  // ]);
+
   if (Platform.OS !== "android") return;
 
   await Notifications.setNotificationChannelAsync("default", {
@@ -93,6 +115,17 @@ async function registerNotificationChannels() {
     vibrationPattern: [],
     lightColor: "#999999",
     showBadge: false,
+  });
+
+  await Notifications.setNotificationChannelAsync("scheduled_call", {
+    name: "Scheduled Call",
+    importance: Notifications.AndroidImportance.MAX,
+    sound: "ringtone.wav", // Android expects filename without extension
+    vibrationPattern: [0, 1000, 1000, 1000, 1000, 1000], // Ring-pause-ring-pause pattern
+    lightColor: "#FF0000",
+    lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+    bypassDnd: true,
+    showBadge: true,
   });
 }
 
@@ -442,10 +475,19 @@ const App: React.FC = () => {
     // Listen for notification response (when user taps notification)
     const notificationResponseListener =
       Notifications.addNotificationResponseReceivedListener((response) => {
-        const { notification } = response;
+        const { notification, actionIdentifier } = response;
         const { data } = notification.request.content;
 
         console.log("👆 Notification tapped:", { data });
+
+        // // Handle action button responses
+        // if (actionIdentifier === "CANCEL_CALL") {
+        //   console.log("❌ Cancel call button pressed");
+        //   // Clear the notification from the panel - no need to open app
+        //   Notifications.dismissNotificationAsync(
+        //     notification.request.identifier
+        //   );
+        // }
 
         setTimeout(() => {
           sendMessageToWebView({
@@ -957,6 +999,51 @@ const App: React.FC = () => {
         } catch (error) {
           console.error("❌ Sharing failed:", error);
         }
+      } else if (data.type === "SCHEDULE_CALL") {
+        const { username, timestamp } = data;
+        console.log("📞 Scheduling call notification:", {
+          username,
+          timestamp,
+        });
+
+        const scheduledDate = new Date(timestamp);
+        const now = new Date();
+
+        if (scheduledDate <= now) {
+          console.warn("⚠️ Cannot schedule notification for past time");
+          return;
+        }
+        await Notifications.scheduleNotificationAsync({
+          content: {
+            title: "📞 Liberdus Call",
+            body: `You have a scheduled call with ${username}.`,
+            data: {
+              type: "SCHEDULE_CALL",
+              username,
+              timestamp,
+            },
+            sound: "ringtone.wav",
+            priority: Notifications.AndroidNotificationPriority.MAX,
+            // categoryIdentifier: "CALL_ACTION",
+            ...(Platform.OS === "ios" && {
+              badge: 1,
+              launchImageName: "icon",
+            }),
+          },
+          trigger: {
+            type: Notifications.SchedulableTriggerInputTypes.DATE,
+            date: scheduledDate,
+            ...(Platform.OS === "android" && {
+              channelId: "scheduled_call",
+              icon: "icon",
+            }),
+          },
+        });
+
+        console.log(
+          "✅ Call notification scheduled successfully for:",
+          scheduledDate
+        );
       } else if (data.type === "APP_PARAMS") {
         const appVersion = Constants.expoConfig?.version || "unknown";
         const data: APP_PARAMS = {
@@ -1110,6 +1197,30 @@ const App: React.FC = () => {
               // Add load end handler
               onLoadEnd={async () => {
                 console.log("✅ WebView load completed");
+
+                // // After 10 seconds, trigger scheduled call notification for calls in next 30s
+                // setTimeout(() => {
+                //   console.log(
+                //     "📞 Triggering scheduled call notifications for calls"
+                //   );
+                //   if (webViewRef.current) {
+                //     // Inject JavaScript to send SCHEDULE_CALL message for upcoming calls
+                //     webViewRef.current.injectJavaScript(`
+                //       (function() {
+                //         // Example scheduled call - replace with actual logic to get upcoming calls
+                //         const time = new Date().getTime() + 10 * 1000; // Add 10 seconds to current time
+
+                //         // Send SCHEDULE_CALL message for a call in 10 seconds
+                //         window.ReactNativeWebView.postMessage(JSON.stringify({
+                //           type: 'SCHEDULE_CALL',
+                //           username: 'jai',
+                //           timestamp: time
+                //         }));
+                //       })();
+                //       true;
+                //     `);
+                //   }
+                // }, 1000); // Wait 1 seconds after load
               }}
               // Add load start handler
               onLoadStart={() => {

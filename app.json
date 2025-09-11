@@ -72,7 +72,13 @@
           "microphonePermission": "Allow Liberdus to access your microphone."
         }
       ],
-      ["expo-notifications"],
+      [
+        "expo-notifications",
+        {
+          "sounds": ["./assets/ringtone.wav", "./assets/ring.wav"],
+          "icon": "./assets/icon.png"
+        }
+      ],
       [
         "@config-plugins/react-native-callkeep",
         {
