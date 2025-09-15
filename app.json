@@ -75,7 +75,7 @@
       [
         "expo-notifications",
         {
-          "sounds": ["./assets/ringtone.wav", "./assets/ring.wav"],
+          "sounds": ["./assets/ringtone.wav", "./assets/noti.wav"],
           "icon": "./assets/icon.png"
         }
       ],

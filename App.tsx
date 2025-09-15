@@ -1014,6 +1014,7 @@ const App: React.FC = () => {
           return;
         }
         await Notifications.scheduleNotificationAsync({
+          identifier: `call-${username}-${timestamp}`,
           content: {
             title: "📞 Liberdus Call",
             body: `You have a scheduled call with ${username}.`,
@@ -1042,7 +1043,7 @@ const App: React.FC = () => {
 
         console.log(
           "✅ Call notification scheduled successfully for:",
-          scheduledDate
+          scheduledDate.toLocaleString()
         );
       } else if (data.type === "APP_PARAMS") {
         const appVersion = Constants.expoConfig?.version || "unknown";
@@ -1198,7 +1199,7 @@ const App: React.FC = () => {
               onLoadEnd={async () => {
                 console.log("✅ WebView load completed");
 
-                // // After 10 seconds, trigger scheduled call notification for calls in next 30s
+                 // // After 10 seconds, trigger scheduled call notification for calls in next 30s
                 // setTimeout(() => {
                 //   console.log(
                 //     "📞 Triggering scheduled call notifications for calls"
