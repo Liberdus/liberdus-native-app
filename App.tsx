@@ -1001,6 +1001,7 @@ const App: React.FC = () => {
         }
       } else if (data.type === "SCHEDULE_CALL") {
         const { username, timestamp } = data;
+        const identifier = `call-${username}-${timestamp}`;
         console.log("📞 Scheduling call notification:", {
           username,
           timestamp,
@@ -1014,7 +1015,7 @@ const App: React.FC = () => {
           return;
         }
         await Notifications.scheduleNotificationAsync({
-          identifier: `call-${username}-${timestamp}`,
+          identifier,
           content: {
             title: "📞 Liberdus Call",
             body: `You have a scheduled call with ${username}.`,
@@ -1043,6 +1044,19 @@ const App: React.FC = () => {
 
         console.log(
           "✅ Call notification scheduled successfully for:",
+          scheduledDate.toLocaleString()
+        );
+      } else if (data.type === "CANCEL_SCHEDULE_CALL") {
+        const { username, timestamp } = data;
+        const identifier = `call-${username}-${timestamp}`;
+        console.log("📞 Canceling scheduled call notification:", {
+          username,
+          timestamp,
+        });
+        await Notifications.cancelScheduledNotificationAsync(identifier);
+        const scheduledDate = new Date(timestamp);
+        console.log(
+          "🛑 Cancelled scheduled call notification for:",
           scheduledDate.toLocaleString()
         );
       } else if (data.type === "APP_PARAMS") {
@@ -1139,7 +1153,7 @@ const App: React.FC = () => {
             <WebView
               key={webViewUrl}
               ref={webViewRef}
-              // nativeConfig={{ props: { webContentsDebuggingEnabled: true } }}
+              webviewDebuggingEnabled={true}
               source={{ uri: webViewUrl }}
               style={styles.webView}
               allowsInlineMediaPlayback={true} // ✅ Required for <video> on iOS
@@ -1199,29 +1213,49 @@ const App: React.FC = () => {
               onLoadEnd={async () => {
                 console.log("✅ WebView load completed");
 
-                 // // After 10 seconds, trigger scheduled call notification for calls in next 30s
+                // const timestamp = Date.now() + 10 * 1000; // After 10 seconds from now
+
                 // setTimeout(() => {
                 //   console.log(
-                //     "📞 Triggering scheduled call notifications for calls"
+                //     `📞 Triggering scheduled call notification for timestamp: ${timestamp}`
                 //   );
                 //   if (webViewRef.current) {
-                //     // Inject JavaScript to send SCHEDULE_CALL message for upcoming calls
+                //     // Inject JavaScript to send SCHEDULE_CALL message to schedule a notification
                 //     webViewRef.current.injectJavaScript(`
                 //       (function() {
-                //         // Example scheduled call - replace with actual logic to get upcoming calls
-                //         const time = new Date().getTime() + 10 * 1000; // Add 10 seconds to current time
-
-                //         // Send SCHEDULE_CALL message for a call in 10 seconds
+                //         // Send SCHEDULE_CALL message
                 //         window.ReactNativeWebView.postMessage(JSON.stringify({
                 //           type: 'SCHEDULE_CALL',
                 //           username: 'jai',
-                //           timestamp: time
+                //           timestamp: ${timestamp}
                 //         }));
+
                 //       })();
                 //       true;
                 //     `);
                 //   }
                 // }, 1000); // Wait 1 seconds after load
+
+                // setTimeout(() => {
+                //   console.log(
+                //     `📞 Clearing scheduled call notification for timestamp: ${timestamp}`
+                //   );
+                //   if (webViewRef.current) {
+                //     // Inject JavaScript to send CANCEL_SCHEDULE_CALL message to cancel the scheduled notification
+                //     webViewRef.current.injectJavaScript(`
+                //       (function() {
+                //         // Send CANCEL_SCHEDULE_CALL message
+                //         window.ReactNativeWebView.postMessage(JSON.stringify({
+                //           type: 'CANCEL_SCHEDULE_CALL',
+                //           username: 'jai',
+                //           timestamp: ${timestamp}
+                //         }));
+
+                //       })();
+                //       true;
+                //     `);
+                //   }
+                // }, 3000); // Wait 3 seconds after load
               }}
               // Add load start handler
               onLoadStart={() => {
