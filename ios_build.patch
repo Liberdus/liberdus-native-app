@@ -1,0 +1,12 @@
+diff --git a/.easignore b/.easignore
+index f43839a..2038df1 100644
+--- a/.easignore
++++ b/.easignore
+@@ -36,7 +36,6 @@ yarn-error.*
+ *.tsbuildinfo
+ 
+ android
+-ios
+ service-account.json
+ 
+ # These are needed for EAS Build, so don't ignore them
