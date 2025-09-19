@@ -1206,9 +1206,9 @@ const App: React.FC = () => {
               // injectedJavaScript={injectedJavaScript} // Can be used for logging the webview console
               onMessage={handleWebViewMessage}
               // Bounce effect on iOS
-              bounces={true}
-              // Scroll enabled
-              scrollEnabled={true}
+              bounces={!isKeyboardVisible}
+              // Scroll enabled - disable when keyboard is visible to prevent scrolling to white space
+              scrollEnabled={!isKeyboardVisible}
               // Add load end handler
               onLoadEnd={async () => {
                 console.log("✅ WebView load completed");
