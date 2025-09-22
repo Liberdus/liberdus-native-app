@@ -5,6 +5,7 @@ import uuid from "react-native-uuid";
 export interface CallData {
   callerName: string;
   callId: string;
+  sentAt: string;
   hasVideo: boolean;
 }
 
@@ -33,9 +34,12 @@ export const callKeepOptions = {
   },
 };
 
+export const ANDROID_INCOMING_CALL_TIMEOUT_MS = 60 * 1000; // 1 minute
+
 class CallKeepService {
   public isSetup: boolean = false;
   private currentCallUUID: string | null = null;
+  private incomingCallTimeout: ReturnType<typeof setTimeout> | null = null;
 
   public async setup(
     appState: "active" | "background" = "active"
@@ -133,6 +137,7 @@ class CallKeepService {
 
   public clearCurrentCall(): void {
     this.currentCallUUID = null;
+    this.clearIncomingCallTimeout();
   }
 
   public handleIncomingCall(data: CallData): void {
@@ -147,8 +152,8 @@ class CallKeepService {
 
       // Store call data for handling
       this.currentCallUUID = callUUID;
-
       this.displayIncomingCall(callerName, callUUID);
+      this.startIncomingCallTimeout(callUUID);
       console.log("✅ Call displayed successfully");
     } catch (error) {
       console.error("❌ Failed to handle incoming call:", error);
@@ -221,6 +226,7 @@ class CallKeepService {
 
   public endCall(callUUID: string): void {
     try {
+      this.clearIncomingCallTimeout();
       RNCallKeep.endCall(callUUID);
       console.log(`Call ${callUUID} ended`);
     } catch (error) {
@@ -283,6 +289,7 @@ class CallKeepService {
   private onAnswerCall = ({ callUUID }: { callUUID: string }): void => {
     console.log("📞 Call answered:", callUUID);
     this.currentCallUUID = callUUID;
+    this.clearIncomingCallTimeout();
 
     console.log("🔄 Call answered - bringing app to foreground");
 
@@ -342,6 +349,8 @@ class CallKeepService {
     if (this.currentCallUUID === callUUID) {
       this.currentCallUUID = null;
     }
+
+    this.clearIncomingCallTimeout();
 
     // End the call
     try {
@@ -444,6 +453,39 @@ class CallKeepService {
 
       this.isSetup = false;
     }
+
+    this.clearIncomingCallTimeout();
+  }
+
+  private startIncomingCallTimeout(callUUID: string): void {
+    if (Platform.OS !== "android") return;
+
+    this.clearIncomingCallTimeout();
+    console.log(
+      `⏱️ Starting timeout for Android call ${callUUID} (${ANDROID_INCOMING_CALL_TIMEOUT_MS}ms)`
+    );
+
+    this.incomingCallTimeout = setTimeout(() => {
+      console.log(
+        `⏱️ Auto ending incoming call ${callUUID} after ${ANDROID_INCOMING_CALL_TIMEOUT_MS}ms timeout`
+      );
+
+      // Double-check the call is still active and unanswered
+      if (this.currentCallUUID === callUUID) {
+        console.log(`🔚 Force ending timed-out call ${callUUID}`);
+        this.endCall(callUUID);
+      } else {
+        console.log(`ℹ️ Call ${callUUID} already handled, skipping timeout`);
+      }
+    }, ANDROID_INCOMING_CALL_TIMEOUT_MS);
+  }
+
+  private clearIncomingCallTimeout(): void {
+    if (!this.incomingCallTimeout) return;
+
+    console.log("⏱️ Clearing Android call timeout");
+    clearTimeout(this.incomingCallTimeout);
+    this.incomingCallTimeout = null;
   }
 }
 

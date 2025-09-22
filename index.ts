@@ -7,11 +7,16 @@ import {
 } from "@react-native-firebase/messaging";
 import type { FirebaseMessagingTypes } from "@react-native-firebase/messaging";
 import App from "./App";
-import { CallData, callKeepOptions } from "./CallKeepService";
+import {
+  CallData,
+  callKeepOptions,
+  ANDROID_INCOMING_CALL_TIMEOUT_MS,
+} from "./CallKeepService";
 import RNCallKeep from "react-native-callkeep";
 
 const MESSAGE_IDS_KEY = "processed_message_ids";
 const MAX_STORED_MESSAGES = 5;
+const BACKGROUND_CALL_EXPIRY_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
 
 const handleMessageDeduplication = async (
   messageId: string
@@ -46,6 +51,39 @@ const handleMessageDeduplication = async (
   }
 
   return false; // Message is not duplicate
+};
+
+const isStaleCallNotification = (callData: CallData): boolean => {
+  if (!callData.sentAt) {
+    console.log(
+      `📵 Background: Rejecting call with missing sentAt timestamp - sentAt: ${callData.sentAt}`
+    );
+    return true;
+  }
+  const sentAtTimestamp = Date.parse(callData.sentAt);
+
+  // If we can't get timestamp from notification data, reject the call
+  if (!Number.isFinite(sentAtTimestamp)) {
+    console.log(
+      `📵 Background: Rejecting call with invalid sentAt timestamp - sentAt: ${callData.sentAt}`
+    );
+    return true;
+  }
+
+  const ageMs = Date.now() - sentAtTimestamp;
+  if (ageMs > BACKGROUND_CALL_EXPIRY_THRESHOLD_MS) {
+    console.log(
+      `📵 Background: Ignoring stale call notification ${
+        callData?.callId || ""
+      } (age ${Math.round(ageMs / 1000)}s)`
+    );
+    return true;
+  }
+
+  console.log(
+    `✅ Background: Call timestamp valid (age ${Math.round(ageMs / 1000)}s)`
+  );
+  return false;
 };
 
 // Background message handler for Firebase (when app is killed or backgrounded)
@@ -89,6 +127,10 @@ if (Platform.OS == "android") {
 
         try {
           const callData = remoteMessage.data as unknown as CallData;
+          // Check if call notification is stale
+          if (isStaleCallNotification(callData)) {
+            return;
+          }
           const callerName = callData.callerName || "Unknown Caller";
           const callUUID = callData.callId as string;
 
@@ -120,6 +162,16 @@ if (Platform.OS == "android") {
               RNCallKeep.setup(callKeepOptions);
               RNCallKeep.setAvailable(true);
 
+              let incomingCallTimeout: ReturnType<typeof setTimeout> | null =
+                null;
+
+              const clearIncomingCallTimeout = () => {
+                if (!incomingCallTimeout) return;
+
+                clearTimeout(incomingCallTimeout);
+                incomingCallTimeout = null;
+              };
+
               // Register event handlers
               const answerCallHandler = ({
                 callUUID,
@@ -130,6 +182,8 @@ if (Platform.OS == "android") {
                   "📞 Background: Call answered event received:",
                   callUUID
                 );
+
+                clearIncomingCallTimeout();
 
                 try {
                   console.log("🚀 Background: Bringing app to foreground");
@@ -151,6 +205,8 @@ if (Platform.OS == "android") {
                     console.log("❌ Background: endAllCalls failed:", allError);
                   }
                 }
+
+                cleanUpRNCallKeepHandlers();
               };
 
               const endCallHandler = ({ callUUID }: { callUUID: string }) => {
@@ -159,6 +215,7 @@ if (Platform.OS == "android") {
                   callUUID
                 );
 
+                clearIncomingCallTimeout();
                 cleanUpRNCallKeepHandlers();
               };
 
@@ -166,10 +223,45 @@ if (Platform.OS == "android") {
               RNCallKeep.addEventListener("endCall", endCallHandler);
 
               const cleanUpRNCallKeepHandlers = () => {
+                clearIncomingCallTimeout();
                 // Cleanup event listeners after call is handled
                 RNCallKeep.removeEventListener("answerCall");
                 RNCallKeep.removeEventListener("endCall");
                 console.log("🧹 Background: Event listeners cleaned up");
+              };
+
+              const startIncomingCallTimeout = (callUUID: string) => {
+                clearIncomingCallTimeout();
+
+                incomingCallTimeout = setTimeout(() => {
+                  console.log(
+                    `⏱️ Background: Auto ending call ${callUUID} after ${ANDROID_INCOMING_CALL_TIMEOUT_MS}ms`
+                  );
+
+                  try {
+                    RNCallKeep.endCall(callUUID);
+                    console.log(`✅ Background: Auto-ended call ${callUUID}`);
+                  } catch (autoEndError) {
+                    console.log(
+                      "⚠️ Background: Auto end failed, trying endAllCalls:",
+                      autoEndError
+                    );
+
+                    try {
+                      RNCallKeep.endAllCalls();
+                      console.log(
+                        "✅ Background: endAllCalls after auto timeout successful"
+                      );
+                    } catch (autoAllError) {
+                      console.log(
+                        "❌ Background: endAllCalls after auto timeout failed:",
+                        autoAllError
+                      );
+                    }
+                  } finally {
+                    cleanUpRNCallKeepHandlers();
+                  }
+                }, ANDROID_INCOMING_CALL_TIMEOUT_MS);
               };
 
               console.log("✅ Background: CallKeep event handlers registered");
@@ -184,6 +276,8 @@ if (Platform.OS == "android") {
               console.log(
                 "✅ Background: Native displayIncomingCall successful"
               );
+
+              startIncomingCallTimeout(callUUID);
             } else {
               console.error(
                 "❌ Background: RNCallKeep native module not available"
