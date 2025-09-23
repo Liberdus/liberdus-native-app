@@ -80,20 +80,54 @@ public class AppDelegate: ExpoAppDelegate, PKPushRegistryDelegate {
     // Instead, use this method to notify your server not to send push notifications using the matching push token.
   }
   
+  // Check if call notification is stale (older than 5 minutes)
+  private func isStaleCallNotification(payload: [AnyHashable: Any]) -> Bool {
+    let backgroundCallExpiryThresholdMs: TimeInterval = 5 * 60 * 1000 // 5 minutes
+
+    guard let sentAtString = payload["sentAt"] as? String else {
+      NSLog("[AppDelegate] 📵 Background: Rejecting call with missing sentAt timestamp")
+      return true
+    }
+
+    // Parse ISO 8601 date string with fractional seconds
+    let dateFormatter = ISO8601DateFormatter()
+    dateFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    guard let sentAtDate = dateFormatter.date(from: sentAtString) else {
+      NSLog("[AppDelegate] 📵 Background: Rejecting call with invalid sentAt timestamp - sentAt: \(sentAtString)")
+      return true
+    }
+
+    let currentTime = Date()
+    let ageMs = currentTime.timeIntervalSince(sentAtDate) * 1000
+    let ageSeconds = Int(ageMs / 1000)
+    let thresholdSeconds = Int(backgroundCallExpiryThresholdMs / 1000)
+
+    NSLog("[AppDelegate] 📊 Call time check - sentAt: \(sentAtString), current: \(currentTime), age: \(ageSeconds)s, threshold: \(thresholdSeconds)s")
+
+    if ageMs > backgroundCallExpiryThresholdMs {
+      let callId = payload["callId"] as? String ?? ""
+      NSLog("[AppDelegate] 📵 Background: Ignoring stale call notification \(callId) (age \(ageSeconds)s > \(thresholdSeconds)s)")
+      return true
+    }
+
+    NSLog("[AppDelegate] ✅ Background: Call timestamp valid (age \(ageSeconds)s <= \(thresholdSeconds)s)")
+    return false
+  }
+
   // Handle incoming pushes
   public func pushRegistry(_ registry: PKPushRegistry, didReceiveIncomingPushWith payload: PKPushPayload, for type: PKPushType, completion: @escaping () -> Void) {
     NSLog("[AppDelegate] VoIP push received when app state: \(UIApplication.shared.applicationState.rawValue)")
     NSLog("[AppDelegate] VoIP payload: \(payload.dictionaryPayload)")
-    
+
     // Don't call completion immediately - let React Native handle it
     // completion() will be called by RNVoipPushNotificationManager.addCompletionHandler
-    
+
     // Retrieve information from your VoIP push payload
     let payloadDict = payload.dictionaryPayload
     let uuid = payloadDict["callId"] as? String ?? payloadDict["callUUID"] as? String ?? UUID().uuidString
     let callerName = payloadDict["callerName"] as? String ?? payloadDict["from"] as? String ?? "Unknown Caller"
     let handle = payloadDict["handle"] as? String ?? callerName
-    
+
     NSLog("[AppDelegate] Processing VoIP call - UUID: \(uuid), Caller: \(callerName)")
     
     // CRITICAL: For killed app scenarios, we MUST call CallKit immediately
@@ -101,29 +135,52 @@ public class AppDelegate: ExpoAppDelegate, PKPushRegistryDelegate {
     let appState = UIApplication.shared.applicationState
     if appState != .active {
       NSLog("[AppDelegate] App not active (state: \(appState.rawValue)) - reporting to CallKit immediately")
-      
+
+      // Check if the call notification is stale
+      let isStale: Bool = isStaleCallNotification(payload: payload.dictionaryPayload)
+
+      // Setup RNCallKeep with iOS configuration before reporting call
+      let callKeepOptions: [String: Any] = [
+        "appName": "Liberdus",
+        "maximumCallGroups": 1,
+        "maximumCallsPerCallGroup": 1,
+        "supportsVideo": true,
+        "includesCallsInRecents": true,
+      ]
+
+      NSLog("[AppDelegate] 🔧 Setting up RNCallKeep with options: \(callKeepOptions)")
+
       do {
-        RNCallKeep.reportNewIncomingCall(
-          uuid,
-          handle: handle,
-          handleType: "generic",
-          hasVideo: true,
-          localizedCallerName: callerName,
-          supportsHolding: true,
-          supportsDTMF: true,
-          supportsGrouping: true,
-          supportsUngrouping: true,
-          fromPushKit: true,
-          payload: nil,
-          withCompletionHandler: completion
-        )
-        NSLog("[AppDelegate] ✅ CallKit reported for killed/background state")
-      } catch let error as NSError {
-        NSLog("[AppDelegate] ❌ CallKit error: \(error.localizedDescription)")
-        NSLog("[AppDelegate] ❌ CallKit error domain: \(error.domain), code: \(error.code)")
-        // Don't rethrow - continue with VoIP processing
+        try RNCallKeep.setup(callKeepOptions)
+        NSLog("[AppDelegate] ✅ RNCallKeep setup completed for background call")
       } catch {
-        NSLog("[AppDelegate] ❌ CallKit unexpected error: \(error)")
+        NSLog("[AppDelegate] ❌ RNCallKeep setup failed: \(error)")
+        // Try with minimal configuration as fallback
+        let minimalOptions: [String: Any] = ["appName": "Liberdus"]
+        try? RNCallKeep.setup(minimalOptions)
+        NSLog("[AppDelegate] 🔄 Fallback RNCallKeep setup attempted")
+      }
+
+      RNCallKeep.reportNewIncomingCall(
+        uuid,
+        handle: handle,
+        handleType: "generic",
+        hasVideo: true,
+        localizedCallerName: callerName,
+        supportsHolding: true,
+        supportsDTMF: true,
+        supportsGrouping: true,
+        supportsUngrouping: true,
+        fromPushKit: true,
+        payload: nil,
+        withCompletionHandler: completion
+      )
+      NSLog("[AppDelegate] ✅ CallKit reported for killed/background state")
+
+      // If the call was stale, immediately end it after reporting to CallKit
+      if isStale {
+        NSLog("[AppDelegate] 📵 Ending stale call immediately")
+        RNCallKeep.endCall(withUUID: uuid, reason: 6) // CXCallEndedReasonUnanswered
       }
     }
     
