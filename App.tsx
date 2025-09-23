@@ -345,9 +345,9 @@ const App: React.FC = () => {
     };
   }, []);
 
-  // Android keyboard handling - by communicating with webview
+  // Keyboard handling - send overlap detection and native scroll lock to webview
   useEffect(() => {
-    if (Platform.OS === "android") {
+    if (Platform.OS === "android" || Platform.OS === "ios") {
       const keyboardDidShowListener = Keyboard.addListener(
         "keyboardDidShow",
         (event) => {
@@ -358,6 +358,8 @@ const App: React.FC = () => {
           if (hasCapturedInitialHeight) {
             setTimeout(() => {
               sendMessageToWebView({ type: "KEYBOARD_SHOWN", keyboardHeight });
+              // Also drive native scroll lock explicitly
+              sendMessageToWebView({ type: "NATIVE_KEYBOARD_SHOWN" });
             }, 100); // Increased timeout for better reliability
           } else {
             console.log(
@@ -374,6 +376,11 @@ const App: React.FC = () => {
           setIsKeyboardVisible(false);
           setNeedsManualKeyboardHandling(false);
           console.log("⌨️ Keyboard hidden");
+          // Notify web app
+          setTimeout(() => {
+            // And unlock native scroll lock
+            sendMessageToWebView({ type: "NATIVE_KEYBOARD_HIDDEN" });
+          }, 100);
         }
       );
 
@@ -632,56 +639,6 @@ const App: React.FC = () => {
       };
     }
   }, []);
-
-  // Inject page-level scroll lock into the WebView when keyboard is visible
-  useEffect(() => {
-    if (!webViewRef.current) return;
-
-    const lockScript = `
-      (function(){
-        try {
-          if(!window.__rnScrollLock){ window.__rnScrollLock = { handler: null }; }
-          var allowSel = '.messages-container';
-          var handler = function(e){
-            try {
-              if (!e.target.closest(allowSel)) {
-                e.preventDefault();
-              }
-            } catch(_) {}
-          };
-          window.__rnScrollLock.handler = handler;
-          document.documentElement.style.overscrollBehavior = 'none';
-          document.body.style.overscrollBehavior = 'none';
-          document.documentElement.style.touchAction = 'pan-y';
-          document.body.style.touchAction = 'pan-y';
-          window.addEventListener('touchmove', handler, { passive: false });
-          true;
-        } catch (e) { console.log('RN_LOCK_ERR', e && e.message); }
-      })();
-    `;
-
-    const unlockScript = `
-      (function(){
-        try {
-          var L = window.__rnScrollLock;
-          document.documentElement.style.overscrollBehavior = 'auto';
-          document.body.style.overscrollBehavior = 'auto';
-          document.documentElement.style.touchAction = 'auto';
-          document.body.style.touchAction = 'auto';
-          if(L && L.handler){ window.removeEventListener('touchmove', L.handler, { passive: false }); L.handler = null; }
-          true;
-        } catch (e) { console.log('RN_UNLOCK_ERR', e && e.message); }
-      })();
-    `;
-
-    if (isKeyboardVisible) {
-      console.log("🧷 Injecting page scroll lock into WebView");
-      webViewRef.current.injectJavaScript(lockScript);
-    } else {
-      console.log("🧷 Removing page scroll lock from WebView");
-      webViewRef.current.injectJavaScript(unlockScript);
-    }
-  }, [isKeyboardVisible]);
 
   useEffect(() => {
     console.log("📱 Launched once:", hasLaunchedOnce);
@@ -1187,7 +1144,7 @@ const App: React.FC = () => {
       ...(Platform.OS === "android" &&
         isKeyboardVisible &&
         needsManualKeyboardHandling && {
-          marginBottom: keyboardHeight + 17, // Use full keyboard height minus small buffer
+          marginBottom: keyboardHeight,
         }),
     };
 
