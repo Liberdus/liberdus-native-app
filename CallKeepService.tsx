@@ -1,40 +1,11 @@
 import RNCallKeep from "react-native-callkeep";
 import { Platform, AppState } from "react-native";
 import uuid from "react-native-uuid";
-
-export interface CallData {
-  callerName: string;
-  callId: string;
-  sentAt: string;
-  hasVideo: boolean;
-}
-
-export const callKeepOptions = {
-  ios: {
-    appName: "Liberdus",
-    maximumCallGroups: "1",
-    maximumCallsPerCallGroup: "1",
-    supportsVideo: false,
-    includesCallsInRecents: true,
-  },
-  android: {
-    alertTitle: "Phone call permissions",
-    alertDescription: "This application needs access to manage phone calls",
-    cancelButton: "Cancel",
-    okButton: "OK",
-    additionalPermissions: [],
-    selfManaged: false,
-    // Add foreground service configuration for Android 10+
-    foregroundService: {
-      channelId: "com.liberdus.callkeep",
-      channelName: "Liberdus Background Call Service",
-      notificationTitle: "Liberdus is handling calls",
-      notificationIcon: "ic_launcher", // Uses your app icon
-    },
-  },
-};
-
-export const ANDROID_INCOMING_CALL_TIMEOUT_MS = 60 * 1000; // 1 minute
+import {
+  CallData,
+  callKeepOptions,
+  ANDROID_INCOMING_CALL_TIMEOUT_MS,
+} from "./CallKeepOptions";
 
 class CallKeepService {
   public isSetup: boolean = false;

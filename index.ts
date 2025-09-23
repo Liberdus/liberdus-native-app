@@ -11,12 +11,12 @@ import {
   CallData,
   callKeepOptions,
   ANDROID_INCOMING_CALL_TIMEOUT_MS,
-} from "./CallKeepService";
+  isStaleCallNotification,
+} from "./CallKeepOptions";
 import RNCallKeep from "react-native-callkeep";
 
 const MESSAGE_IDS_KEY = "processed_message_ids";
 const MAX_STORED_MESSAGES = 5;
-const BACKGROUND_CALL_EXPIRY_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
 
 const handleMessageDeduplication = async (
   messageId: string
@@ -51,39 +51,6 @@ const handleMessageDeduplication = async (
   }
 
   return false; // Message is not duplicate
-};
-
-const isStaleCallNotification = (callData: CallData): boolean => {
-  if (!callData.sentAt) {
-    console.log(
-      `📵 Background: Rejecting call with missing sentAt timestamp - sentAt: ${callData.sentAt}`
-    );
-    return true;
-  }
-  const sentAtTimestamp = Date.parse(callData.sentAt);
-
-  // If we can't get timestamp from notification data, reject the call
-  if (!Number.isFinite(sentAtTimestamp)) {
-    console.log(
-      `📵 Background: Rejecting call with invalid sentAt timestamp - sentAt: ${callData.sentAt}`
-    );
-    return true;
-  }
-
-  const ageMs = Date.now() - sentAtTimestamp;
-  if (ageMs > BACKGROUND_CALL_EXPIRY_THRESHOLD_MS) {
-    console.log(
-      `📵 Background: Ignoring stale call notification ${
-        callData?.callId || ""
-      } (age ${Math.round(ageMs / 1000)}s)`
-    );
-    return true;
-  }
-
-  console.log(
-    `✅ Background: Call timestamp valid (age ${Math.round(ageMs / 1000)}s)`
-  );
-  return false;
 };
 
 // Background message handler for Firebase (when app is killed or backgrounded)

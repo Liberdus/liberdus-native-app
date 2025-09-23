@@ -25,7 +25,8 @@ import * as FileSystem from "expo-file-system";
 import * as Sharing from "expo-sharing";
 import FileViewer from "react-native-file-viewer";
 import AnimatedSplash from "./SplashScreen";
-import CallKeepService, { CallData } from "./CallKeepService";
+import CallKeepService from "./CallKeepService";
+import { CallData, isStaleCallNotification } from "./CallKeepOptions";
 import {
   getMessaging,
   requestPermission,
@@ -172,6 +173,10 @@ export function setupVoIPPushNotifications(
 
         // Display incoming call through CallKeepService
         try {
+          // Check if call notification is stale
+          if (isStaleCallNotification(notification as CallData)) {
+            return;
+          }
           CallKeepService.handleIncomingCall(notification as CallData);
           VoipPushNotification.onVoipNotificationCompleted(notification.callId);
 
@@ -466,7 +471,8 @@ const App: React.FC = () => {
     const notificationReceivedListener =
       Notifications.addNotificationReceivedListener((notification) => {
         const { data } = notification.request.content;
-        console.log("👆 Notification received:", { data });
+        const receivedTime = new Date().toLocaleString();
+        console.log("👆 Notification received:", { data, receivedTime });
         sendMessageToWebView({
           type: "NEW_NOTIFICATION",
         });
@@ -477,8 +483,9 @@ const App: React.FC = () => {
       Notifications.addNotificationResponseReceivedListener((response) => {
         const { notification, actionIdentifier } = response;
         const { data } = notification.request.content;
+        const tappedTime = new Date().toLocaleString();
 
-        console.log("👆 Notification tapped:", { data });
+        console.log("👆 Notification tapped:", { data, tappedTime });
 
         // // Handle action button responses
         // if (actionIdentifier === "CANCEL_CALL") {
@@ -561,9 +568,12 @@ const App: React.FC = () => {
           if (isCallMessage) {
             // Handle call message
             try {
-              CallKeepService.handleIncomingCall(
-                remoteMessage.data as unknown as CallData
-              );
+              const callData = remoteMessage.data as unknown as CallData;
+              // Check if call notification is stale
+              if (isStaleCallNotification(callData)) {
+                return;
+              }
+              CallKeepService.handleIncomingCall(callData);
             } catch (error) {
               console.error(
                 "❌ Error processing foreground call message:",
@@ -1087,7 +1097,6 @@ const App: React.FC = () => {
             date: scheduledDate,
             ...(Platform.OS === "android" && {
               channelId: "scheduled_call",
-              icon: "icon",
             }),
           },
         });

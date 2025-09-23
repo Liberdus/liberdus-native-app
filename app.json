@@ -46,7 +46,9 @@
         "android.permission.DISABLE_KEYGUARD",
         "android.permission.TURN_SCREEN_ON",
         "android.permission.FOREGROUND_SERVICE",
-        "android.permission.POST_NOTIFICATIONS"
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.SCHEDULE_EXACT_ALARM",
+        "android.permission.USE_EXACT_ALARM"
       ],
       "googleServicesFile": "./google-services.json"
     },
