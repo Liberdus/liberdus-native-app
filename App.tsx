@@ -1026,22 +1026,27 @@ const App: React.FC = () => {
 
         const scheduledDate = new Date(timestamp);
         const now = new Date();
+        const isImmediate = scheduledDate <= now;
 
-        if (scheduledDate <= now) {
-          console.warn("⚠️ Cannot schedule notification for past time");
-          return;
-        }
+        console.log(
+          isImmediate
+            ? "⏰ Timestamp is in the past, showing notification immediately"
+            : "⏰ Timestamp is in the future, scheduling notification"
+        );
+
         await Notifications.scheduleNotificationAsync({
           identifier,
           content: {
             title: "📞 Liberdus Call",
-            body: `You have a scheduled call with ${username}.`,
+            body: `You have a ${
+              isImmediate ? "call" : "scheduled call"
+            } with ${username}.`,
             data: {
               type: "SCHEDULE_CALL",
               username,
               timestamp,
             },
-            sound: "ringtone.wav",
+            sound: isImmediate ? "default" : "ringtone.wav",
             priority: Notifications.AndroidNotificationPriority.MAX,
             // categoryIdentifier: "CALL_ACTION",
             ...(Platform.OS === "ios" && {
@@ -1049,18 +1054,21 @@ const App: React.FC = () => {
               launchImageName: "icon",
             }),
           },
-          trigger: {
-            type: Notifications.SchedulableTriggerInputTypes.DATE,
-            date: scheduledDate,
-            ...(Platform.OS === "android" && {
-              channelId: "scheduled_call",
-            }),
-          },
+          trigger: isImmediate
+            ? null
+            : {
+                type: Notifications.SchedulableTriggerInputTypes.DATE,
+                date: scheduledDate,
+                ...(Platform.OS === "android" && {
+                  channelId: "scheduled_call",
+                }),
+              },
         });
 
         console.log(
-          "✅ Call notification scheduled successfully for:",
-          scheduledDate.toLocaleString()
+          isImmediate
+            ? "✅ Call notification shown immediately"
+            : `✅ Call notification scheduled successfully for: ${scheduledDate.toLocaleString()}`
         );
       } else if (data.type === "CANCEL_SCHEDULE_CALL") {
         const { username, timestamp } = data;
