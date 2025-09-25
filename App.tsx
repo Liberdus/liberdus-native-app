@@ -425,10 +425,72 @@ const App: React.FC = () => {
         date: new Date(notification.date).toISOString(),
       }));
 
+      // Console log notifications
+      // notificationsData.forEach((notification) => {
+      //   console.log("📱 Notification:", notification);
+      // });
+
       return notificationsData;
     } catch (error) {
       console.error("❌ Failed to get all panel notifications:", error);
       return [];
+    }
+  };
+
+  /**
+   * Dismiss panel notifications whose body/data(to) contains the target address.
+   * Returns a summary for logging purposes.
+   */
+  const clearPanelNotificationsByAddress = async (
+    address: string
+  ): Promise<{ requested: number; cleared: number; remaining: number }> => {
+    try {
+      const notifications = await getPanelNotifications();
+
+      const matchingNotifications = notifications.filter((notification) => {
+        return (
+          notification.body?.includes(address) ||
+          notification.data?.to === address
+        );
+      });
+
+      const dismissalResults = await Promise.allSettled(
+        matchingNotifications.map((notification) =>
+          Notifications.dismissNotificationAsync(notification.id)
+        )
+      );
+
+      const clearedCount = dismissalResults.filter(
+        (result) => result.status === "fulfilled"
+      ).length;
+
+      dismissalResults.forEach((result, index) => {
+        if (result.status === "rejected") {
+          console.error(
+            "❌ Failed to dismiss notification:",
+            matchingNotifications[index].id,
+            result.reason
+          );
+        }
+      });
+
+      const remainingNotifications =
+        await Notifications.getPresentedNotificationsAsync();
+
+      await Notifications.setBadgeCountAsync(remainingNotifications.length);
+
+      return {
+        requested: matchingNotifications.length,
+        cleared: clearedCount,
+        remaining: remainingNotifications.length,
+      };
+    } catch (error) {
+      console.error(
+        "❌ Failed to clear notifications for address:",
+        address,
+        error
+      );
+      return { requested: 0, cleared: 0, remaining: 0 };
     }
   };
 
@@ -994,9 +1056,27 @@ const App: React.FC = () => {
         showNavBarRef.current = data.visible;
         await toggleNavBar(data.visible);
       } else if (data.type === "CLEAR_NOTI") {
-        console.log("🗑️ Received clear notifications message");
-        await Notifications.setBadgeCountAsync(0);
-        await Notifications.dismissAllNotificationsAsync();
+        console.log("🗑️ Received clear notifications message", data);
+        const address = typeof data.address === "string" ? data.address : "";
+
+        if (address) {
+          const result = await clearPanelNotificationsByAddress(address);
+          console.log(
+            "🧹 Clear notifications result:",
+            JSON.stringify({
+              address,
+              requested: result.requested,
+              cleared: result.cleared,
+              remaining: result.remaining,
+            })
+          );
+        } else {
+          console.log(
+            "⚠️ CLEAR_NOTI message missing address. Clearing all notifications."
+          );
+          await Notifications.setBadgeCountAsync(0);
+          await Notifications.dismissAllNotificationsAsync();
+        }
       } else if (data.type === "SHARE_INVITE") {
         const { url, text, title } = data;
         console.log("📤 Sharing invite:", { url, text, title });
@@ -1280,6 +1360,21 @@ const App: React.FC = () => {
                 //     `);
                 //   }
                 // }, 3000); // Wait 3 seconds after load
+
+                // Send CLEAR_NOTI message + address '' to clear all notifications
+                // setTimeout(() => {
+                //   webViewRef.current?.injectJavaScript(`
+                //     (function() {
+                //       // Send CLEAR_NOTI message
+                //       window.ReactNativeWebView.postMessage(JSON.stringify({
+                //         type: 'CLEAR_NOTI',
+                //         address: ''
+                //       }));
+
+                //     })();
+                //     true;
+                //   `);
+                // }, 2000);
               }}
               // Add load start handler
               onLoadStart={() => {
