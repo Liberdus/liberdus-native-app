@@ -7,7 +7,6 @@ import {
   Keyboard,
   View,
   Share,
-  Dimensions,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { AppState } from "react-native";
