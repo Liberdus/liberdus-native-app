@@ -1232,13 +1232,16 @@ const App: React.FC = () => {
     if (Platform.OS === "android" && isKeyboardVisible) {
       console.log("⌨️ Keyboard handling:", {
         keyboardHeight,
-        needsManualHandling: false,
-        applyingMargin: false,
+        needsManualHandling: needsManualKeyboardHandling,
+        applyingMargin: needsManualKeyboardHandling,
         mode: "MODERN_WEB_APPROACH",
         webViewProps: {
           contentInsetAdjustmentBehavior: "never",
           automaticallyAdjustContentInsets: false,
           nestedScrollEnabled: true,
+          bounces: false,
+          scrollEnabled: false,
+          overScrollMode: "never",
         },
       });
     }
