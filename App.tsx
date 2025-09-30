@@ -1233,36 +1233,13 @@ const App: React.FC = () => {
         keyboardHeight,
         needsManualHandling: needsManualKeyboardHandling,
         applyingMargin: needsManualKeyboardHandling,
-        mode: "MODERN_WEB_APPROACH",
-        webViewProps: {
-          contentInsetAdjustmentBehavior: "never",
-          automaticallyAdjustContentInsets: false,
-          nestedScrollEnabled: true,
-          bounces: false,
-          scrollEnabled: false,
-          overScrollMode: "never",
-        },
       });
     }
 
     return (
       <SafeAreaView style={styles.container}>
-          <KeyboardAvoidingView behavior="padding" style={styles.container}>
-            <View
-              style={styles.container}
-              onLayout={(event) => {
-                const { width, height, x, y } = event.nativeEvent.layout;
-                console.log(
-                  `📐 [${new Date().toISOString().slice(11, 23)}] CONTAINER LAYOUT:`,
-                  { width, height, x, y }
-                );
-                console.log(
-                  `   ⌨️  Keyboard status: ${
-                    isKeyboardVisible ? "VISIBLE" : "HIDDEN"
-                  }`
-                );
-              }}
-            >
+          <KeyboardAvoidingView style={styles.container} behavior="padding">
+            <View style={styles.container}>
               <StatusBar hidden={true} />
               <WebView
                 key={webViewUrl}
@@ -1325,9 +1302,6 @@ const App: React.FC = () => {
                 /* Reduce rubber-banding and horizontal bounce */
                 bounces={false}
                 overScrollMode="never"
-                //directionalLockEnabled={true}
-                /* Enable nested scrolling for better touch handling */
-                nestedScrollEnabled={true}
                 /* Disable native scrolling to let web content handle scrolling */
                 scrollEnabled={false}
                 /* Additional scroll prevention */
@@ -1379,6 +1353,19 @@ const App: React.FC = () => {
                   //     `);
                   //   }
                   // }, 3000); // Wait 3 seconds after load
+                  // Send CLEAR_NOTI message + address '' to clear all notifications
+                  // setTimeout(() => {
+                  //   webViewRef.current?.injectJavaScript(`
+                  //     (function() {
+                  //       // Send CLEAR_NOTI message
+                  //       window.ReactNativeWebView.postMessage(JSON.stringify({
+                  //         type: 'CLEAR_NOTI',
+                  //         address: ''
+                  //       }));
+                  //     })();
+                  //     true;
+                  //   `);
+                  // }, 2000);
                 }}
                 // Add load start handler
                 onLoadStart={() => {
@@ -1400,7 +1387,6 @@ const App: React.FC = () => {
             </View>
           </KeyboardAvoidingView>
         </SafeAreaView>
-
     );
   }
 };
