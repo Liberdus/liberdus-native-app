@@ -33,6 +33,7 @@
         "backgroundColor": "#FFFFFF"
       },
       "package": "com.jairaj.liberdus",
+      "softwareKeyboardLayoutMode": "adjustNothing",
       "permissions": [
         "android.permission.INTERNET",
         "android.permission.VIBRATE",
