@@ -4,7 +4,6 @@ import {
   Alert,
   Platform,
   SafeAreaView,
-  KeyboardAvoidingView,
   AlertButton,
   Keyboard,
   View,
@@ -346,50 +345,50 @@ const App: React.FC = () => {
   }, []);
 
   // Modern keyboard handling - minimal native involvement, let web content handle via Visual Viewport API
-  // useEffect(() => {
-  //   if (Platform.OS === "android" || Platform.OS === "ios") {
-  //     const keyboardDidShowListener = Keyboard.addListener(
-  //       "keyboardDidShow",
-  //       (event) => {
-  //         const keyboardHeight = event.endCoordinates.height;
-  //         setKeyboardHeight(keyboardHeight);
-  //         setIsKeyboardVisible(true);
-  //         console.log("⌨️ Keyboard shown, height:", keyboardHeight);
-  //         if (hasCapturedInitialHeight) {
-  //           setTimeout(() => {
-  //             sendMessageToWebView({ type: "KEYBOARD_SHOWN", keyboardHeight });
-  //             // Also drive native scroll lock explicitly
-  //             sendMessageToWebView({ type: "NATIVE_KEYBOARD_SHOWN" });
-  //           }, 100); // Increased timeout for better reliability
-  //         } else {
-  //           console.log(
-  //             "⚠️ No valid initial height captured yet, skipping keyboard detection"
-  //           );
-  //         }
-  //       }
-  //     );
+  useEffect(() => {
+    if (Platform.OS === "android" || Platform.OS === "ios") {
+      const keyboardDidShowListener = Keyboard.addListener(
+        "keyboardDidShow",
+        (event) => {
+          const keyboardHeight = event.endCoordinates.height;
+          setKeyboardHeight(keyboardHeight);
+          setIsKeyboardVisible(true);
+          console.log("⌨️ Keyboard shown, height:", keyboardHeight);
+          if (hasCapturedInitialHeight) {
+            setTimeout(() => {
+              sendMessageToWebView({ type: "KEYBOARD_SHOWN", keyboardHeight });
+              // Also drive native scroll lock explicitly
+              sendMessageToWebView({ type: "NATIVE_KEYBOARD_SHOWN" });
+            }, 100); // Increased timeout for better reliability
+          } else {
+            console.log(
+              "⚠️ No valid initial height captured yet, skipping keyboard detection"
+            );
+          }
+        }
+      );
 
-  //     const keyboardDidHideListener = Keyboard.addListener(
-  //       "keyboardDidHide",
-  //       () => {
-  //         setKeyboardHeight(0);
-  //         setIsKeyboardVisible(false);
-  //         setNeedsManualKeyboardHandling(false);
-  //         console.log("⌨️ Keyboard hidden");
-  //         // Notify web app
-  //         setTimeout(() => {
-  //           // And unlock native scroll lock
-  //           sendMessageToWebView({ type: "NATIVE_KEYBOARD_HIDDEN" });
-  //         }, 100);
-  //       }
-  //     );
+      const keyboardDidHideListener = Keyboard.addListener(
+        "keyboardDidHide",
+        () => {
+          setKeyboardHeight(0);
+          setIsKeyboardVisible(false);
+          setNeedsManualKeyboardHandling(false);
+          console.log("⌨️ Keyboard hidden");
+          // Notify web app
+          setTimeout(() => {
+            // And unlock native scroll lock
+            sendMessageToWebView({ type: "NATIVE_KEYBOARD_HIDDEN" });
+          }, 100);
+        }
+      );
 
-  //     return () => {
-  //       keyboardDidShowListener.remove();
-  //       keyboardDidHideListener.remove();
-  //     };
-  //   }
-  // }, [hasCapturedInitialHeight]);
+      return () => {
+        keyboardDidShowListener.remove();
+        keyboardDidHideListener.remove();
+      };
+    }
+  }, [hasCapturedInitialHeight]);
 
   const sendMessageToWebView = (message: object) => {
     const messageJson = JSON.stringify(message);
@@ -1227,7 +1226,16 @@ const App: React.FC = () => {
   }
 
   if (showWebView) {
-    // Log modern keyboard handling approach
+    const webViewContainerStyle = {
+      flex: 1,
+      ...(Platform.OS === "android" &&
+        isKeyboardVisible &&
+        needsManualKeyboardHandling && {
+          marginBottom: keyboardHeight,
+        }),
+    };
+
+    // Log keyboard handling state
     if (Platform.OS === "android" && isKeyboardVisible) {
       console.log("⌨️ Keyboard handling:", {
         keyboardHeight,
@@ -1239,13 +1247,8 @@ const App: React.FC = () => {
     return (
       <SafeAreaView style={styles.container}>
         <StatusBar hidden={true} />
-        <KeyboardAvoidingView
-          style={{ flex: 1 }}
-          behavior="padding"
-          keyboardVerticalOffset={0}
-        >
-          <View style={styles.container}>
-            <WebView
+        <View style={webViewContainerStyle}>
+          <WebView
               key={webViewUrl}
               ref={webViewRef}
               webviewDebuggingEnabled={true}
@@ -1381,8 +1384,7 @@ const App: React.FC = () => {
                 webViewRef.current?.reload();
               }}
             />
-          </View>
-        </KeyboardAvoidingView>
+        </View>
       </SafeAreaView>
     );
   }
