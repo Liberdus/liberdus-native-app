@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Liberdus",
+    "name": "Liberdus App",
     "slug": "liberdus",
     "version": "2025.1011.1226",
     "orientation": "portrait",
@@ -11,7 +11,7 @@
     "ios": {
       "buildNumber": "6",
       "supportsTablet": false,
-      "bundleIdentifier": "com.jairaj.liberdus",
+      "bundleIdentifier": "com.liberdus.app",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSCameraUsageDescription": "Camera access is needed to scan QR codes and capture photos or videos to share in messages.",
@@ -22,8 +22,8 @@
         },
         "com.apple.CallKit.CallsDirectory": true,
         "BGTaskSchedulerPermittedIdentifiers": [
-          "com.jairaj.liberdus.voip-notification",
-          "com.jairaj.liberdus.background-processing"
+          "com.liberdus.app.voip-notification",
+          "com.liberdus.app.background-processing"
         ]
       }
     },

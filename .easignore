@@ -36,11 +36,10 @@ yarn-error.*
 *.tsbuildinfo
 
 android
-ios
 service-account.json
 
 # These are needed for EAS Build, so don't ignore them
-!credentials.json
+!credentials*.json
 !certs/_.p12
 !certs/_.mobileprovision
 !auth/\*.p8

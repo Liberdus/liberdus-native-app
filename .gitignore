@@ -44,7 +44,6 @@ google-services.json
 /auth
 /certs
 .easrc
-eas.patch
-credentials.json
-
+eas.patch*
+credentials*.json
 
