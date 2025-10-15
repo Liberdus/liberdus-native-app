@@ -2,7 +2,7 @@
   "expo": {
     "name": "Liberdus App",
     "slug": "liberdus",
-    "version": "2025.1011.1226",
+    "version": "2025.1015.1044",
     "orientation": "portrait",
     "jsEngine": "hermes",
     "icon": "./assets/icon.png",
@@ -16,7 +16,7 @@
         "ITSAppUsesNonExemptEncryption": false,
         "NSCameraUsageDescription": "Camera access is needed to scan QR codes and capture photos or videos to share in messages.",
         "NSMicrophoneUsageDescription": "Microphone access is needed to record audio for videos you share in messages.",
-        "UIBackgroundModes": ["audio", "voip", "remote-notification"],
+        "UIBackgroundModes": ["voip", "remote-notification"],
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true
         },
@@ -71,7 +71,7 @@
       [
         "expo-audio",
         {
-          "microphonePermission": "Allow Liberdus to access your microphone."
+          "microphonePermission": "To send end to end encrypted voice messages."
         }
       ],
       [
