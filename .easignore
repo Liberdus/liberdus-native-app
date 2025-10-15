@@ -37,6 +37,8 @@ yarn-error.*
 
 android
 service-account.json
+*.ipa
+*.aab
 
 # These are needed for EAS Build, so don't ignore them
 !credentials*.json

@@ -37,6 +37,8 @@ yarn-error.*
 
 android
 ios
+*.ipa
+*.aab
 
 service-account.json
 google-services.json
