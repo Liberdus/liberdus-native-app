@@ -4,7 +4,6 @@ import {
   Alert,
   Platform,
   SafeAreaView,
-  KeyboardAvoidingView,
   AlertButton,
   Keyboard,
   View,
@@ -345,7 +344,7 @@ const App: React.FC = () => {
     };
   }, []);
 
-  // Keyboard handling - send overlap detection and native scroll lock to webview
+  // Modern keyboard handling - minimal native involvement, let web content handle via Visual Viewport API
   useEffect(() => {
     if (Platform.OS === "android" || Platform.OS === "ios") {
       const keyboardDidShowListener = Keyboard.addListener(
@@ -1248,13 +1247,8 @@ const App: React.FC = () => {
     return (
       <SafeAreaView style={styles.container}>
         <StatusBar hidden={true} />
-        <KeyboardAvoidingView
-          style={{ flex: 1 }}
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
-          keyboardVerticalOffset={0}
-        >
-          <View style={webViewContainerStyle}>
-            <WebView
+        <View style={webViewContainerStyle}>
+          <WebView
               key={webViewUrl}
               ref={webViewRef}
               webviewDebuggingEnabled={true}
@@ -1309,10 +1303,10 @@ const App: React.FC = () => {
               setSupportMultipleWindows={false}
               // injectedJavaScript={injectedJavaScript} // Can be used for logging the webview console
               onMessage={handleWebViewMessage}
-              // Bounce effect on iOS
-              bounces={!isKeyboardVisible}
-              // Scroll enabled - disable when keyboard is visible to prevent scrolling to white space
-              scrollEnabled={!isKeyboardVisible}
+              /* Modern approach: Disable WebView automatic adjustments - let web content handle keyboard */
+              /* Reduce rubber-banding and horizontal bounce */
+              bounces={false}
+              
               // Add load end handler
               onLoadEnd={async () => {
                 console.log("✅ WebView load completed");
@@ -1354,13 +1348,11 @@ const App: React.FC = () => {
                 //           username: 'jai',
                 //           timestamp: ${timestamp}
                 //         }));
-
                 //       })();
                 //       true;
                 //     `);
                 //   }
                 // }, 3000); // Wait 3 seconds after load
-
                 // Send CLEAR_NOTI message + address '' to clear all notifications
                 // setTimeout(() => {
                 //   webViewRef.current?.injectJavaScript(`
@@ -1370,7 +1362,6 @@ const App: React.FC = () => {
                 //         type: 'CLEAR_NOTI',
                 //         address: ''
                 //       }));
-
                 //     })();
                 //     true;
                 //   `);
@@ -1393,8 +1384,7 @@ const App: React.FC = () => {
                 webViewRef.current?.reload();
               }}
             />
-          </View>
-        </KeyboardAvoidingView>
+        </View>
       </SafeAreaView>
     );
   }
