@@ -2,6 +2,7 @@
   "expo": {
     "name": "Liberdus",
     "slug": "liberdus",
+    "scheme": "liberdus",
     "version": "2025.1015.1044",
     "orientation": "portrait",
     "jsEngine": "hermes",
