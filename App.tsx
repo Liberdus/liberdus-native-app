@@ -391,6 +391,21 @@ const App: React.FC = () => {
     }
   }, [hasCapturedInitialHeight]);
 
+  useEffect(() => {
+    const sub = Linking.addEventListener("url", ({ url }) => {
+      console.log("🔗 Returned to app:", url);
+      if (url.includes("oauth")) {
+        // Remove scheme (exp+liberdus://oauth#)
+        const [, queryString] = url.split("oauth#");
+        console.log("🔗 OAuth query string:", queryString);
+        sendMessageToWebView({ type: "oauth", queryString });
+      }
+      // Parse the token from the URL fragment
+    });
+
+    return () => sub.remove();
+  }, []);
+
   const sendMessageToWebView = (message: object) => {
     const messageJson = JSON.stringify(message);
     if (webViewRef.current) {
