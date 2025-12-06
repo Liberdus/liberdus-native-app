@@ -3,7 +3,7 @@
     "name": "Liberdus",
     "slug": "liberdus",
     "scheme": "liberdus",
-    "version": "2025.1015.1044",
+    "version": "2025.1206.1725",
     "orientation": "portrait",
     "jsEngine": "hermes",
     "icon": "./assets/icon.png",
@@ -12,7 +12,7 @@
     "ios": {
       "buildNumber": "6",
       "supportsTablet": false,
-      "bundleIdentifier": "com.jairaj.liberdus",
+      "bundleIdentifier": "com.liberdus.app",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSCameraUsageDescription": "Camera access is needed to scan QR codes and capture photos or videos to share in messages.",
@@ -23,8 +23,8 @@
         },
         "com.apple.CallKit.CallsDirectory": true,
         "BGTaskSchedulerPermittedIdentifiers": [
-          "com.jairaj.liberdus.voip-notification",
-          "com.jairaj.liberdus.background-processing"
+          "com.liberdus.app.voip-notification",
+          "com.liberdus.app.background-processing"
         ]
       }
     },
