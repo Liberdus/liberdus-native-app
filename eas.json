@@ -21,13 +21,7 @@
       "autoIncrement": true,
       "distribution": "store",
       "ios": {
-        "buildConfiguration": "Release",
-        "buildSettings": {
-          "DEBUG_INFORMATION_FORMAT": "dwarf-with-dsym"
-        },
-        "env": {
-          "HERMES_ENABLE_DEBUG": "1"
-        }
+        "buildConfiguration": "Release"
       }
     }
   },

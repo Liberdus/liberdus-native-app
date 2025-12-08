@@ -11,7 +11,7 @@
     "assetBundlePatterns": ["**/*"],
     "ios": {
       "buildNumber": "6",
-      "supportsTablet": false,
+      "supportsTablet": true,
       "bundleIdentifier": "com.liberdus.app",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
