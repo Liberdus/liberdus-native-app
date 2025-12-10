@@ -16,6 +16,7 @@ import { useRef } from "react";
 import * as Linking from "expo-linking";
 import { WebView } from "react-native-webview";
 import * as Notifications from "expo-notifications";
+import * as WebBrowser from "expo-web-browser";
 import * as NavigationBar from "expo-navigation-bar";
 import * as Device from "expo-device";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -1005,6 +1006,29 @@ const App: React.FC = () => {
           type: "ALL_NOTIFICATIONS_IN_PANEL",
           notifications,
         });
+        return;
+      }
+
+      // Handle Google OAuth requests from webview
+      if (data.type === "GOOGLE_OAUTH_REQUEST") {
+        console.log("🔐 Google OAuth request received from WebView");
+        
+        try {
+          // Get the OAuth URL from the web app - it should always be provided
+          const oauthUrl = data.url;
+          if (!oauthUrl) {
+            throw new Error("OAuth URL not provided by web app");
+          }
+
+          console.log("🌐 Opening OAuth URL in in-app browser:", oauthUrl);
+
+          // Use openBrowserAsync - the redirect URL will automatically close the browser via deep link
+          await WebBrowser.openBrowserAsync(oauthUrl, {
+            showInRecents: true,
+          });
+        } catch (error) {
+          console.error("❌ Error opening OAuth browser:", error);
+        }
         return;
       }
 
