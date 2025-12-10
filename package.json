@@ -41,7 +41,8 @@
     "react-native-uuid": "^2.0.3",
     "react-native-voip-push-notification": "^3.3.3",
     "react-native-webview": "^13.15.0",
-    "uuid": "^11.1.0"
+    "uuid": "^11.1.0",
+    "expo-web-browser": "~14.2.0"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
