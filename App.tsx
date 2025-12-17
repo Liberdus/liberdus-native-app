@@ -1130,11 +1130,12 @@ const App: React.FC = () => {
           console.error("❌ Sharing failed:", error);
         }
       } else if (data.type === "SCHEDULE_CALL") {
-        const { username, timestamp } = data;
+        const { username, timestamp, address } = data;
         const identifier = `call-${username}-${timestamp}`;
         console.log("📞 Scheduling call notification:", {
           username,
           timestamp,
+          address,
         });
 
         const scheduledDate = new Date(timestamp);
@@ -1158,6 +1159,7 @@ const App: React.FC = () => {
               type: "SCHEDULE_CALL",
               username,
               timestamp,
+              to: address,
             },
             sound: isImmediate ? "default" : "ringtone.wav",
             priority: Notifications.AndroidNotificationPriority.MAX,
