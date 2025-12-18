@@ -3,7 +3,7 @@
     "name": "Liberdus",
     "slug": "liberdus",
     "scheme": "liberdus",
-    "version": "2025.1211.1145",
+    "version": "2025.1218.1450",
     "orientation": "portrait",
     "jsEngine": "hermes",
     "icon": "./assets/icon.png",
