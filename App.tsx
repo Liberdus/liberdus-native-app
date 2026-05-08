@@ -1295,6 +1295,7 @@ const App: React.FC = () => {
               webviewDebuggingEnabled={true}
               source={{ uri: webViewUrl }}
               style={styles.webView}
+              geolocationEnabled={true}
               allowsInlineMediaPlayback={true} // ✅ Required for <video> on iOS
               mediaPlaybackRequiresUserAction={false} // ✅ Let camera start automatically
               // mediaCapturePermissionGrantType={"grant"} // ✅ Prompt for media capture permissions

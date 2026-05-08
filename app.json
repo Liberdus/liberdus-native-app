@@ -3,7 +3,7 @@
     "name": "Liberdus",
     "slug": "liberdus",
     "scheme": "liberdus",
-    "version": "2025.1218.1450",
+    "version": "2026.0508.1829",
     "orientation": "portrait",
     "jsEngine": "hermes",
     "icon": "./assets/icon.png",
@@ -16,6 +16,7 @@
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSCameraUsageDescription": "Camera access is needed to scan QR codes and capture photos or videos to share in messages.",
+        "NSLocationWhenInUseUsageDescription": "Location access is used when you choose to share your current location in a message.",
         "NSMicrophoneUsageDescription": "Microphone access is needed to record audio for videos you share in messages.",
         "UIBackgroundModes": ["voip", "remote-notification"],
         "NSAppTransportSecurity": {
@@ -38,6 +39,8 @@
       "permissions": [
         "android.permission.INTERNET",
         "android.permission.VIBRATE",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO",
         "android.permission.WAKE_LOCK",
