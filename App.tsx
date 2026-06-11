@@ -522,9 +522,6 @@ const App: React.FC = () => {
     }
   };
 
-  const getRequestId = (data: any): string | undefined =>
-    typeof data?.requestId === "string" ? data.requestId : undefined;
-
   const isTrustedLiberdusUrl = (url?: string): boolean => {
     if (!url) return false;
 
@@ -537,53 +534,6 @@ const App: React.FC = () => {
       );
     } catch {
       return false;
-    }
-  };
-
-  const getWebViewMessageUrl = (event: any): string | undefined => {
-    const messageUrl = event?.nativeEvent?.url;
-    return typeof messageUrl === "string" ? messageUrl : webViewUrl;
-  };
-
-  const sendLocationBridgeRejected = (
-    responseType: "LOCATION_PERMISSION_RESULT" | "CURRENT_LOCATION",
-    requestId?: string
-  ) => {
-    sendMessageToWebView({
-      type: responseType,
-      requestId,
-      status: "error",
-      granted: false,
-      canAskAgain: false,
-      message: "Location requests are only allowed from trusted Liberdus pages.",
-    });
-  };
-
-  const requestLocationPermissionForWebView = async (requestId?: string) => {
-    try {
-      const permission = await Location.requestForegroundPermissionsAsync();
-
-      sendMessageToWebView({
-        type: "LOCATION_PERMISSION_RESULT",
-        requestId,
-        status: permission.status,
-        granted: permission.granted,
-        canAskAgain: permission.canAskAgain,
-      });
-
-      return permission;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      console.error("❌ Failed to request location permission:", error);
-      sendMessageToWebView({
-        type: "LOCATION_PERMISSION_RESULT",
-        requestId,
-        status: "error",
-        granted: false,
-        canAskAgain: false,
-        message,
-      });
-      return null;
     }
   };
 
@@ -631,6 +581,7 @@ const App: React.FC = () => {
         requestId,
         status: "error",
         granted: false,
+        canAskAgain: false,
         message,
       });
     }
@@ -1124,26 +1075,30 @@ const App: React.FC = () => {
         return;
       }
 
-      if (data.type === "REQUEST_LOCATION_PERMISSION") {
-        console.log("📍 WebView requested location permission");
-        const requestId = getRequestId(data);
-        if (!isTrustedLiberdusUrl(getWebViewMessageUrl(event))) {
-          console.warn("📍 Rejected location permission request from untrusted page");
-          sendLocationBridgeRejected("LOCATION_PERMISSION_RESULT", requestId);
-          return;
-        }
-        await requestLocationPermissionForWebView(requestId);
-        return;
-      }
-
       if (data.type === "GET_CURRENT_LOCATION") {
         console.log("📍 WebView requested current location");
-        const requestId = getRequestId(data);
-        if (!isTrustedLiberdusUrl(getWebViewMessageUrl(event))) {
+
+        const requestId =
+          typeof data.requestId === "string" ? data.requestId : undefined;
+        const messageUrl =
+          typeof event.nativeEvent.url === "string"
+            ? event.nativeEvent.url
+            : webViewUrl;
+
+        if (!isTrustedLiberdusUrl(messageUrl)) {
           console.warn("📍 Rejected current location request from untrusted page");
-          sendLocationBridgeRejected("CURRENT_LOCATION", requestId);
+          sendMessageToWebView({
+            type: "CURRENT_LOCATION",
+            requestId,
+            status: "error",
+            granted: false,
+            canAskAgain: false,
+            message:
+              "Location requests are only allowed from trusted Liberdus pages.",
+          });
           return;
         }
+
         await sendCurrentLocationToWebView(requestId);
         return;
       }
