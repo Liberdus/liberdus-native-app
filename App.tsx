@@ -23,6 +23,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Crypto from "expo-crypto";
 import Constants from "expo-constants";
 import * as FileSystem from "expo-file-system";
+import * as Location from "expo-location";
 import * as Sharing from "expo-sharing";
 import FileViewer from "react-native-file-viewer";
 import AnimatedSplash from "./SplashScreen";
@@ -521,6 +522,86 @@ const App: React.FC = () => {
     }
   };
 
+  const getRequestId = (data: any): string | undefined =>
+    typeof data?.requestId === "string" ? data.requestId : undefined;
+
+  const requestLocationPermissionForWebView = async (requestId?: string) => {
+    try {
+      const permission = await Location.requestForegroundPermissionsAsync();
+
+      sendMessageToWebView({
+        type: "LOCATION_PERMISSION_RESULT",
+        requestId,
+        status: permission.status,
+        granted: permission.granted,
+        canAskAgain: permission.canAskAgain,
+      });
+
+      return permission;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error("❌ Failed to request location permission:", error);
+      sendMessageToWebView({
+        type: "LOCATION_PERMISSION_RESULT",
+        requestId,
+        status: "error",
+        granted: false,
+        canAskAgain: false,
+        message,
+      });
+      return null;
+    }
+  };
+
+  const sendCurrentLocationToWebView = async (requestId?: string) => {
+    try {
+      const permission = await Location.requestForegroundPermissionsAsync();
+
+      if (!permission.granted) {
+        sendMessageToWebView({
+          type: "CURRENT_LOCATION",
+          requestId,
+          status: permission.status,
+          granted: false,
+          canAskAgain: permission.canAskAgain,
+        });
+        return;
+      }
+
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+
+      sendMessageToWebView({
+        type: "CURRENT_LOCATION",
+        requestId,
+        status: "granted",
+        granted: true,
+        canAskAgain: permission.canAskAgain,
+        coords: {
+          latitude: location.coords.latitude,
+          longitude: location.coords.longitude,
+          accuracy: location.coords.accuracy,
+          altitude: location.coords.altitude,
+          altitudeAccuracy: location.coords.altitudeAccuracy,
+          heading: location.coords.heading,
+          speed: location.coords.speed,
+        },
+        timestamp: location.timestamp,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error("❌ Failed to get current location:", error);
+      sendMessageToWebView({
+        type: "CURRENT_LOCATION",
+        requestId,
+        status: "error",
+        granted: false,
+        message,
+      });
+    }
+  };
+
   useEffect(() => {
     (async () => {
       // await AsyncStorage.removeItem(APP_URL_KEY);
@@ -1006,6 +1087,18 @@ const App: React.FC = () => {
           type: "ALL_NOTIFICATIONS_IN_PANEL",
           notifications,
         });
+        return;
+      }
+
+      if (data.type === "REQUEST_LOCATION_PERMISSION") {
+        console.log("📍 WebView requested location permission");
+        await requestLocationPermissionForWebView(getRequestId(data));
+        return;
+      }
+
+      if (data.type === "GET_CURRENT_LOCATION") {
+        console.log("📍 WebView requested current location");
+        await sendCurrentLocationToWebView(getRequestId(data));
         return;
       }
 
