@@ -42,12 +42,29 @@ import type { FirebaseMessagingTypes } from "@react-native-firebase/messaging";
 import VoipPushNotification from "react-native-voip-push-notification";
 
 const APP_URL = "https://liberdus.com/test/";
+const TRUSTED_LOCATION_HOSTS = ["liberdus.com", "arimaa.com"];
 
 // Storage keys
 const DEVICE_TOKEN_KEY = "device_token";
 const APP_URL_KEY = "app_url";
 
 const APP_RESUME_DELAY_MS = 1500; // 1.5 second delay before checking for app resume
+
+const isTrustedLocationUrl = (url?: string): boolean => {
+  if (!url) return false;
+
+  try {
+    const { hostname, protocol } = new URL(url);
+    if (protocol !== "https:") return false;
+
+    return TRUSTED_LOCATION_HOSTS.some(
+      (trustedHost) =>
+        hostname === trustedHost || hostname.endsWith("." + trustedHost)
+    );
+  } catch {
+    return false;
+  }
+};
 
 interface APP_PARAMS {
   appVersion: string;
@@ -522,8 +539,26 @@ const App: React.FC = () => {
     }
   };
 
-  const sendCurrentLocationToWebView = async (requestId?: string) => {
+  const sendCurrentLocationToWebView = async (
+    requestId?: string,
+    requestUrl?: string
+  ) => {
     try {
+      if (!isTrustedLocationUrl(requestUrl)) {
+        console.warn(
+          "📍 Ignoring location request from untrusted URL:",
+          requestUrl
+        );
+        sendMessageToWebView({
+          type: "CURRENT_LOCATION",
+          requestId,
+          status: "untrusted_origin",
+          granted: false,
+          canAskAgain: false,
+        });
+        return;
+      }
+
       const permission = await Location.requestForegroundPermissionsAsync();
 
       if (!permission.granted) {
@@ -1065,7 +1100,12 @@ const App: React.FC = () => {
         const requestId =
           typeof data.requestId === "string" ? data.requestId : undefined;
 
-        await sendCurrentLocationToWebView(requestId);
+        const requestUrl =
+          typeof event.nativeEvent.url === "string"
+            ? event.nativeEvent.url
+            : webViewUrl;
+
+        await sendCurrentLocationToWebView(requestId, requestUrl);
         return;
       }
 
