@@ -522,21 +522,6 @@ const App: React.FC = () => {
     }
   };
 
-  const isTrustedLiberdusUrl = (url?: string): boolean => {
-    if (!url) return false;
-
-    try {
-      const parsed = new URL(url);
-      return (
-        parsed.protocol === "https:" &&
-        (parsed.hostname === "liberdus.com" ||
-          parsed.hostname.endsWith(".liberdus.com"))
-      );
-    } catch {
-      return false;
-    }
-  };
-
   const sendCurrentLocationToWebView = async (requestId?: string) => {
     try {
       const permission = await Location.requestForegroundPermissionsAsync();
@@ -1077,27 +1062,8 @@ const App: React.FC = () => {
 
       if (data.type === "GET_CURRENT_LOCATION") {
         console.log("📍 WebView requested current location");
-
         const requestId =
           typeof data.requestId === "string" ? data.requestId : undefined;
-        const messageUrl =
-          typeof event.nativeEvent.url === "string"
-            ? event.nativeEvent.url
-            : webViewUrl;
-
-        if (!isTrustedLiberdusUrl(messageUrl)) {
-          console.warn("📍 Rejected current location request from untrusted page");
-          sendMessageToWebView({
-            type: "CURRENT_LOCATION",
-            requestId,
-            status: "error",
-            granted: false,
-            canAskAgain: false,
-            message:
-              "Location requests are only allowed from trusted Liberdus pages.",
-          });
-          return;
-        }
 
         await sendCurrentLocationToWebView(requestId);
         return;
