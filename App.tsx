@@ -42,7 +42,21 @@ import type { FirebaseMessagingTypes } from "@react-native-firebase/messaging";
 import VoipPushNotification from "react-native-voip-push-notification";
 
 const APP_URL = "https://liberdus.com/test/";
-const TRUSTED_LOCATION_HOSTS = ["liberdus.com", "arimaa.com"];
+const TRUSTED_BRIDGE_HOSTS = ["liberdus.com", "arimaa.com"];
+const SENSITIVE_BRIDGE_MESSAGE_TYPES = new Set([
+  "APP_PARAMS",
+  "CANCEL_SCHEDULE_CALL",
+  "CLEAR_NOTI",
+  "DOWNLOAD_ATTACHMENT",
+  "EXPORT_BACKUP",
+  "GET_CURRENT_LOCATION",
+  "GetAllPanelNotifications",
+  "GOOGLE_OAUTH_REQUEST",
+  "NAV_BAR",
+  "SCHEDULE_CALL",
+  "SHARE_INVITE",
+  "launch",
+]);
 
 // Storage keys
 const DEVICE_TOKEN_KEY = "device_token";
@@ -50,20 +64,33 @@ const APP_URL_KEY = "app_url";
 
 const APP_RESUME_DELAY_MS = 1500; // 1.5 second delay before checking for app resume
 
-const isTrustedLocationUrl = (url?: string): boolean => {
+const isTrustedBridgeUrl = (url?: string): boolean => {
   if (!url) return false;
 
   try {
     const { hostname, protocol } = new URL(url);
-    if (protocol !== "https:") return false;
+    const isHttpsTrustedHost =
+      protocol === "https:" &&
+      TRUSTED_BRIDGE_HOSTS.some(
+        (trustedHost) =>
+          hostname === trustedHost || hostname.endsWith("." + trustedHost)
+      );
 
-    return TRUSTED_LOCATION_HOSTS.some(
-      (trustedHost) =>
-        hostname === trustedHost || hostname.endsWith("." + trustedHost)
-    );
+    if (isHttpsTrustedHost) return true;
+
+    return __DEV__ && (protocol === "http:" || protocol === "https:");
   } catch {
     return false;
   }
+};
+
+const isSensitiveBridgeMessage = (messageType: unknown): messageType is string =>
+  typeof messageType === "string" &&
+  SENSITIVE_BRIDGE_MESSAGE_TYPES.has(messageType);
+
+const getBridgeRequestUrl = (event: any, fallbackUrl: string): string => {
+  const eventUrl = event?.nativeEvent?.url;
+  return typeof eventUrl === "string" ? eventUrl : fallbackUrl;
 };
 
 interface APP_PARAMS {
@@ -429,6 +456,28 @@ const App: React.FC = () => {
     }
   };
 
+  const sendRejectedBridgeRequest = (
+    messageType: string,
+    requestId?: string
+  ) => {
+    sendMessageToWebView({
+      type: "BRIDGE_REQUEST_REJECTED",
+      requestedType: messageType,
+      requestId,
+      status: "untrusted_origin",
+    });
+
+    if (messageType === "GET_CURRENT_LOCATION") {
+      sendMessageToWebView({
+        type: "CURRENT_LOCATION",
+        requestId,
+        status: "untrusted_origin",
+        granted: false,
+        canAskAgain: false,
+      });
+    }
+  };
+
   /**
    * Get all notifications and return them
    * @returns Array of notifications in the panel
@@ -539,26 +588,8 @@ const App: React.FC = () => {
     }
   };
 
-  const sendCurrentLocationToWebView = async (
-    requestId?: string,
-    requestUrl?: string
-  ) => {
+  const sendCurrentLocationToWebView = async (requestId?: string) => {
     try {
-      if (!isTrustedLocationUrl(requestUrl)) {
-        console.warn(
-          "📍 Ignoring location request from untrusted URL:",
-          requestUrl
-        );
-        sendMessageToWebView({
-          type: "CURRENT_LOCATION",
-          requestId,
-          status: "untrusted_origin",
-          granted: false,
-          canAskAgain: false,
-        });
-        return;
-      }
-
       const permission = await Location.requestForegroundPermissionsAsync();
 
       if (!permission.granted) {
@@ -1081,6 +1112,23 @@ const App: React.FC = () => {
   const handleWebViewMessage = async (event: any) => {
     try {
       const data = JSON.parse(event.nativeEvent.data);
+      const messageType = data.type;
+      const requestId =
+        typeof data.requestId === "string" ? data.requestId : undefined;
+      const requestUrl = getBridgeRequestUrl(event, webViewUrl);
+
+      if (
+        isSensitiveBridgeMessage(messageType) &&
+        !isTrustedBridgeUrl(requestUrl)
+      ) {
+        console.warn(
+          "🔒 Rejected sensitive bridge message from untrusted URL:",
+          messageType,
+          requestUrl
+        );
+        sendRejectedBridgeRequest(messageType, requestId);
+        return;
+      }
 
       // console.log("📡 Received message:", data);
 
@@ -1097,15 +1145,7 @@ const App: React.FC = () => {
 
       if (data.type === "GET_CURRENT_LOCATION") {
         console.log("📍 WebView requested current location");
-        const requestId =
-          typeof data.requestId === "string" ? data.requestId : undefined;
-
-        const requestUrl =
-          typeof event.nativeEvent.url === "string"
-            ? event.nativeEvent.url
-            : webViewUrl;
-
-        await sendCurrentLocationToWebView(requestId, requestUrl);
+        await sendCurrentLocationToWebView(requestId);
         return;
       }
 
