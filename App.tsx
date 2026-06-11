@@ -525,6 +525,40 @@ const App: React.FC = () => {
   const getRequestId = (data: any): string | undefined =>
     typeof data?.requestId === "string" ? data.requestId : undefined;
 
+  const isTrustedLiberdusUrl = (url?: string): boolean => {
+    if (!url) return false;
+
+    try {
+      const parsed = new URL(url);
+      return (
+        parsed.protocol === "https:" &&
+        (parsed.hostname === "liberdus.com" ||
+          parsed.hostname.endsWith(".liberdus.com"))
+      );
+    } catch {
+      return false;
+    }
+  };
+
+  const getWebViewMessageUrl = (event: any): string | undefined => {
+    const messageUrl = event?.nativeEvent?.url;
+    return typeof messageUrl === "string" ? messageUrl : webViewUrl;
+  };
+
+  const sendLocationBridgeRejected = (
+    responseType: "LOCATION_PERMISSION_RESULT" | "CURRENT_LOCATION",
+    requestId?: string
+  ) => {
+    sendMessageToWebView({
+      type: responseType,
+      requestId,
+      status: "error",
+      granted: false,
+      canAskAgain: false,
+      message: "Location requests are only allowed from trusted Liberdus pages.",
+    });
+  };
+
   const requestLocationPermissionForWebView = async (requestId?: string) => {
     try {
       const permission = await Location.requestForegroundPermissionsAsync();
@@ -1092,13 +1126,25 @@ const App: React.FC = () => {
 
       if (data.type === "REQUEST_LOCATION_PERMISSION") {
         console.log("📍 WebView requested location permission");
-        await requestLocationPermissionForWebView(getRequestId(data));
+        const requestId = getRequestId(data);
+        if (!isTrustedLiberdusUrl(getWebViewMessageUrl(event))) {
+          console.warn("📍 Rejected location permission request from untrusted page");
+          sendLocationBridgeRejected("LOCATION_PERMISSION_RESULT", requestId);
+          return;
+        }
+        await requestLocationPermissionForWebView(requestId);
         return;
       }
 
       if (data.type === "GET_CURRENT_LOCATION") {
         console.log("📍 WebView requested current location");
-        await sendCurrentLocationToWebView(getRequestId(data));
+        const requestId = getRequestId(data);
+        if (!isTrustedLiberdusUrl(getWebViewMessageUrl(event))) {
+          console.warn("📍 Rejected current location request from untrusted page");
+          sendLocationBridgeRejected("CURRENT_LOCATION", requestId);
+          return;
+        }
+        await sendCurrentLocationToWebView(requestId);
         return;
       }
 
@@ -1388,7 +1434,6 @@ const App: React.FC = () => {
               webviewDebuggingEnabled={true}
               source={{ uri: webViewUrl }}
               style={styles.webView}
-              geolocationEnabled={true}
               allowsInlineMediaPlayback={true} // ✅ Required for <video> on iOS
               mediaPlaybackRequiresUserAction={false} // ✅ Let camera start automatically
               // mediaCapturePermissionGrantType={"grant"} // ✅ Prompt for media capture permissions
