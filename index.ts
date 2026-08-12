@@ -14,6 +14,10 @@ import {
   isStaleCallNotification,
 } from "./CallKeepOptions";
 import RNCallKeep from "react-native-callkeep";
+import {
+  createNotificationTap,
+  storePendingNotificationTap,
+} from "./NotificationTap";
 
 const MESSAGE_IDS_KEY = "processed_message_ids";
 const MAX_STORED_MESSAGES = 5;
@@ -72,7 +76,19 @@ if (Platform.OS == "android") {
         const isCallMessage = remoteMessage.data?.type === "incoming_call";
 
         if (!isCallMessage) {
-          console.log("📱 Background: Non-call message, ignoring");
+          const notificationTap = createNotificationTap(
+            remoteMessage.messageId ?? null,
+            remoteMessage.data
+          );
+          if (!notificationTap) {
+            console.warn(
+              "⚠️ Background notification is missing a recipient address"
+            );
+            return;
+          }
+
+          await storePendingNotificationTap(notificationTap);
+          console.log("📱 Background: Stored notification tap data");
           return;
         }
 

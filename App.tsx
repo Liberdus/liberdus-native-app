@@ -39,6 +39,12 @@ import {
 } from "@react-native-firebase/messaging";
 import type { FirebaseMessagingTypes } from "@react-native-firebase/messaging";
 import VoipPushNotification from "react-native-voip-push-notification";
+import {
+  clearPendingNotificationTap,
+  createNotificationTap,
+  getPendingNotificationTap,
+  type PendingNotificationTap,
+} from "./NotificationTap";
 
 const APP_URL = "https://liberdus.com/test/";
 
@@ -54,12 +60,6 @@ interface APP_PARAMS {
   expoPushToken?: string;
   voipToken?: string;
   fcmToken?: string;
-}
-
-interface PendingNotificationTap {
-  notificationId: string | null;
-  to: string;
-  from: string | null;
 }
 
 Notifications.setNotificationHandler({
@@ -434,37 +434,35 @@ const App: React.FC = () => {
 
     pendingNotificationTapRef.current = null;
     lastDeliveredNotificationIdRef.current = pendingTap.notificationId;
+    console.log("📱 Delivered notification tap data to the WebView");
+
+    void clearPendingNotificationTap(pendingTap.notificationId).catch(
+      (error) => {
+        console.warn("⚠️ Failed to clear the pending notification tap:", error);
+      }
+    );
 
     void Notifications.clearLastNotificationResponseAsync().catch((error) => {
       console.warn("⚠️ Failed to clear the last notification response:", error);
     });
   };
 
-  const queueNotificationTap = (
-    notificationId: string | null,
-    data: Record<string, unknown> | undefined
-  ) => {
-    const to = data?.to;
-    const from = data?.from;
-    if (typeof to !== "string" || to.length === 0) {
+  const queueNotificationTap = (tap: PendingNotificationTap | null) => {
+    if (!tap) {
       console.warn("⚠️ Notification tap is missing a recipient address");
       return;
     }
 
     if (
-      notificationId &&
-      (notificationId === lastDeliveredNotificationIdRef.current ||
-        notificationId ===
+      tap.notificationId &&
+      (tap.notificationId === lastDeliveredNotificationIdRef.current ||
+        tap.notificationId ===
           pendingNotificationTapRef.current?.notificationId)
     ) {
       return;
     }
 
-    pendingNotificationTapRef.current = {
-      notificationId,
-      to,
-      from: typeof from === "string" ? from : null,
-    };
+    pendingNotificationTapRef.current = tap;
     flushPendingNotificationTap();
   };
 
@@ -623,7 +621,9 @@ const App: React.FC = () => {
 
         console.log("👆 Notification tapped:", { data, tappedTime });
 
-        queueNotificationTap(notification.request.identifier, data);
+        queueNotificationTap(
+          createNotificationTap(notification.request.identifier, data)
+        );
       });
 
     void Notifications.getLastNotificationResponseAsync()
@@ -632,12 +632,25 @@ const App: React.FC = () => {
 
         const { notification } = response;
         queueNotificationTap(
-          notification.request.identifier,
-          notification.request.content.data
+          createNotificationTap(
+            notification.request.identifier,
+            notification.request.content.data
+          )
         );
       })
       .catch((error) => {
         console.warn("⚠️ Failed to get the last notification response:", error);
+      });
+
+    void getPendingNotificationTap()
+      .then((tap) => {
+        if (!tap) return;
+
+        console.log("📱 Restored pending notification tap data");
+        queueNotificationTap(tap);
+      })
+      .catch((error) => {
+        console.warn("⚠️ Failed to restore the pending notification tap:", error);
       });
 
     return () => {
@@ -746,8 +759,10 @@ const App: React.FC = () => {
             remoteMessage
           );
           queueNotificationTap(
-            remoteMessage.messageId ?? null,
-            remoteMessage.data
+            createNotificationTap(
+              remoteMessage.messageId ?? null,
+              remoteMessage.data
+            )
           );
         }
       );
@@ -762,8 +777,10 @@ const App: React.FC = () => {
                 remoteMessage
               );
               queueNotificationTap(
-                remoteMessage.messageId ?? null,
-                remoteMessage.data
+                createNotificationTap(
+                  remoteMessage.messageId ?? null,
+                  remoteMessage.data
+                )
               );
             }
           }
