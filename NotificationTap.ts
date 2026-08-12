@@ -6,6 +6,8 @@ const MAX_PENDING_NOTIFICATION_TAPS = 20;
 type NotificationData = Record<string, unknown>;
 type StoredNotificationTaps = Record<string, string>;
 
+let pendingTapStorageQueue: Promise<void> = Promise.resolve();
+
 const isRecord = (value: unknown): value is NotificationData =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
@@ -18,6 +20,10 @@ export const createNotificationTap = (
   notificationId: string,
   data: NotificationData | undefined
 ): PendingNotificationTap | null => {
+  if (typeof data?.to === "string" && data.to.length > 0) {
+    return { notificationId, to: data.to };
+  }
+
   if (typeof data?.body !== "string") return null;
 
   let body: unknown;
@@ -42,6 +48,17 @@ export const createNotificationTap = (
   };
 };
 
+const withPendingTapStorage = <T>(
+  operation: () => Promise<T>
+): Promise<T> => {
+  const result = pendingTapStorageQueue.then(operation);
+  pendingTapStorageQueue = result.then(
+    () => undefined,
+    () => undefined
+  );
+  return result;
+};
+
 const getStoredNotificationTaps = async (): Promise<StoredNotificationTaps> => {
   const storedValue = await AsyncStorage.getItem(PENDING_NOTIFICATION_TAP_KEY);
   if (!storedValue) return {};
@@ -61,43 +78,46 @@ const getStoredNotificationTaps = async (): Promise<StoredNotificationTaps> => {
   }
 };
 
-export const storePendingNotificationTap = async (
+export const storePendingNotificationTap = (
   tap: PendingNotificationTap
-): Promise<void> => {
-  const storedTaps = await getStoredNotificationTaps();
-  delete storedTaps[tap.notificationId];
-  storedTaps[tap.notificationId] = tap.to;
+): Promise<void> =>
+  withPendingTapStorage(async () => {
+    const storedTaps = await getStoredNotificationTaps();
+    delete storedTaps[tap.notificationId];
+    storedTaps[tap.notificationId] = tap.to;
 
-  await AsyncStorage.setItem(
-    PENDING_NOTIFICATION_TAP_KEY,
-    JSON.stringify(
-      Object.fromEntries(
-        Object.entries(storedTaps).slice(-MAX_PENDING_NOTIFICATION_TAPS)
-      )
-    )
-  );
-};
-
-export const getPendingNotificationTap = async (
-  notificationId: string
-): Promise<PendingNotificationTap | null> => {
-  const to = (await getStoredNotificationTaps())[notificationId];
-  return to ? { notificationId, to } : null;
-};
-
-export const clearPendingNotificationTap = async (
-  notificationId: string
-): Promise<void> => {
-  const storedTaps = await getStoredNotificationTaps();
-  if (!(notificationId in storedTaps)) return;
-
-  delete storedTaps[notificationId];
-  if (Object.keys(storedTaps).length > 0) {
     await AsyncStorage.setItem(
       PENDING_NOTIFICATION_TAP_KEY,
-      JSON.stringify(storedTaps)
+      JSON.stringify(
+        Object.fromEntries(
+          Object.entries(storedTaps).slice(-MAX_PENDING_NOTIFICATION_TAPS)
+        )
+      )
     );
-  } else {
-    await AsyncStorage.removeItem(PENDING_NOTIFICATION_TAP_KEY);
-  }
-};
+  });
+
+export const getPendingNotificationTap = (
+  notificationId: string
+): Promise<PendingNotificationTap | null> =>
+  withPendingTapStorage(async () => {
+    const to = (await getStoredNotificationTaps())[notificationId];
+    return to ? { notificationId, to } : null;
+  });
+
+export const clearPendingNotificationTap = (
+  notificationId: string
+): Promise<void> =>
+  withPendingTapStorage(async () => {
+    const storedTaps = await getStoredNotificationTaps();
+    if (!(notificationId in storedTaps)) return;
+
+    delete storedTaps[notificationId];
+    if (Object.keys(storedTaps).length > 0) {
+      await AsyncStorage.setItem(
+        PENDING_NOTIFICATION_TAP_KEY,
+        JSON.stringify(storedTaps)
+      );
+    } else {
+      await AsyncStorage.removeItem(PENDING_NOTIFICATION_TAP_KEY);
+    }
+  });
