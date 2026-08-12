@@ -444,12 +444,8 @@ const App: React.FC = () => {
     notificationId: string | null,
     data: Record<string, unknown> | undefined
   ) => {
-    if (!data) {
-      console.warn("⚠️ Notification tap is missing data");
-      return;
-    }
-
-    const { to, from } = data;
+    const to = data?.to;
+    const from = data?.from;
     if (typeof to !== "string" || to.length === 0) {
       console.warn("⚠️ Notification tap is missing a recipient address");
       return;
@@ -757,22 +753,24 @@ const App: React.FC = () => {
       );
 
       // Handle messages when app is completely killed and opened by notification
-      getInitialNotification(messagingInstance).then(
-        (remoteMessage: FirebaseMessagingTypes.RemoteMessage | null) => {
-          if (remoteMessage) {
-            console.log(
-              "📱 FCM message opened app from killed state:",
-              remoteMessage
-            );
-            queueNotificationTap(
-              remoteMessage.messageId ?? null,
-              remoteMessage.data
-            );
+      void getInitialNotification(messagingInstance)
+        .then(
+          (remoteMessage: FirebaseMessagingTypes.RemoteMessage | null) => {
+            if (remoteMessage) {
+              console.log(
+                "📱 FCM message opened app from killed state:",
+                remoteMessage
+              );
+              queueNotificationTap(
+                remoteMessage.messageId ?? null,
+                remoteMessage.data
+              );
+            }
           }
-        }
-      ).catch((error) => {
-        console.warn("⚠️ Failed to get the initial FCM notification:", error);
-      });
+        )
+        .catch((error) => {
+          console.warn("⚠️ Failed to get the initial FCM notification:", error);
+        });
 
       // Cleanup listeners
       return () => {
@@ -1066,6 +1064,7 @@ const App: React.FC = () => {
     try {
       const data = JSON.parse(event.nativeEvent.data);
 
+      // The WebView installs its native-message listener before posting here.
       webBridgeReadyRef.current = true;
       flushPendingNotificationTap();
 
