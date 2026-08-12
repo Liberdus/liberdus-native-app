@@ -428,7 +428,6 @@ const App: React.FC = () => {
     const wasSent = sendMessageToWebView({
       type: "NOTIFICATION_TAPPED",
       to: pendingTap.to,
-      from: pendingTap.from,
     });
     if (!wasSent) return;
 

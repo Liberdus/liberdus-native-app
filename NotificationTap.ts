@@ -4,40 +4,39 @@ const PENDING_NOTIFICATION_TAP_KEY = "pending_notification_tap";
 
 type NotificationData = Record<string, unknown>;
 
+const isRecord = (value: unknown): value is NotificationData =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
 export interface PendingNotificationTap {
   notificationId: string | null;
   to: string;
-  from: string | null;
 }
-
-const parseObject = (value: unknown): NotificationData | null => {
-  if (typeof value === "object" && value !== null && !Array.isArray(value)) {
-    return value as NotificationData;
-  }
-
-  if (typeof value !== "string") return null;
-
-  try {
-    return parseObject(JSON.parse(value));
-  } catch {
-    return null;
-  }
-};
 
 export const createNotificationTap = (
   notificationId: string | null,
   data: NotificationData | undefined
 ): PendingNotificationTap | null => {
-  const bodyData = parseObject(data?.body);
-  const to = data?.to ?? bodyData?.to;
-  const from = data?.from ?? bodyData?.from;
+  if (typeof data?.body !== "string") return null;
 
-  if (typeof to !== "string" || to.length === 0) return null;
+  let body: unknown;
+  try {
+    body = JSON.parse(data.body);
+  } catch {
+    return null;
+  }
+
+  if (
+    !isRecord(body) ||
+    body.type !== "message" ||
+    typeof body.to !== "string" ||
+    body.to.length === 0
+  ) {
+    return null;
+  }
 
   return {
     notificationId,
-    to,
-    from: typeof from === "string" ? from : null,
+    to: body.to,
   };
 };
 
@@ -50,24 +49,29 @@ export const storePendingNotificationTap = async (
 export const getPendingNotificationTap = async (): Promise<
   PendingNotificationTap | null
 > => {
-  const storedTap = parseObject(
-    await AsyncStorage.getItem(PENDING_NOTIFICATION_TAP_KEY)
-  );
-  if (!storedTap) return null;
+  const storedValue = await AsyncStorage.getItem(PENDING_NOTIFICATION_TAP_KEY);
+  if (!storedValue) return null;
+
+  let storedTap: unknown;
+  try {
+    storedTap = JSON.parse(storedValue);
+  } catch {
+    return null;
+  }
+
+  if (!isRecord(storedTap)) return null;
 
   const notificationId = storedTap.notificationId;
   const to = storedTap.to;
-  const from = storedTap.from;
 
   if (
     (typeof notificationId !== "string" && notificationId !== null) ||
-    typeof to !== "string" ||
-    (typeof from !== "string" && from !== null)
+    typeof to !== "string"
   ) {
     return null;
   }
 
-  return { notificationId, to, from };
+  return { notificationId, to };
 };
 
 export const clearPendingNotificationTap = async (
