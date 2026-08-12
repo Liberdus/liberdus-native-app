@@ -1,6 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const PENDING_NOTIFICATION_TAP_KEY = "pending_notification_tap";
+const MAX_PENDING_NOTIFICATION_TAPS = 20;
 
 type NotificationData = Record<string, unknown>;
 
@@ -8,12 +9,12 @@ const isRecord = (value: unknown): value is NotificationData =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
 export interface PendingNotificationTap {
-  notificationId: string | null;
+  notificationId: string;
   to: string;
 }
 
 export const createNotificationTap = (
-  notificationId: string | null,
+  notificationId: string,
   data: NotificationData | undefined
 ): PendingNotificationTap | null => {
   if (typeof data?.body !== "string") return null;
@@ -40,33 +41,19 @@ export const createNotificationTap = (
   };
 };
 
-export const storePendingNotificationTap = async (
-  tap: PendingNotificationTap
-): Promise<void> => {
-  await AsyncStorage.setItem(PENDING_NOTIFICATION_TAP_KEY, JSON.stringify(tap));
-};
+const parsePendingNotificationTap = (
+  value: unknown
+): PendingNotificationTap | null => {
+  if (!isRecord(value)) return null;
 
-export const getPendingNotificationTap = async (): Promise<
-  PendingNotificationTap | null
-> => {
-  const storedValue = await AsyncStorage.getItem(PENDING_NOTIFICATION_TAP_KEY);
-  if (!storedValue) return null;
-
-  let storedTap: unknown;
-  try {
-    storedTap = JSON.parse(storedValue);
-  } catch {
-    return null;
-  }
-
-  if (!isRecord(storedTap)) return null;
-
-  const notificationId = storedTap.notificationId;
-  const to = storedTap.to;
+  const notificationId = value.notificationId;
+  const to = value.to;
 
   if (
-    (typeof notificationId !== "string" && notificationId !== null) ||
-    typeof to !== "string"
+    typeof notificationId !== "string" ||
+    notificationId.length === 0 ||
+    typeof to !== "string" ||
+    to.length === 0
   ) {
     return null;
   }
@@ -74,11 +61,68 @@ export const getPendingNotificationTap = async (): Promise<
   return { notificationId, to };
 };
 
-export const clearPendingNotificationTap = async (
-  notificationId: string | null
+const getPendingNotificationTaps = async (): Promise<
+  PendingNotificationTap[]
+> => {
+  const storedValue = await AsyncStorage.getItem(PENDING_NOTIFICATION_TAP_KEY);
+  if (!storedValue) return [];
+
+  let storedTaps: unknown;
+  try {
+    storedTaps = JSON.parse(storedValue);
+  } catch {
+    return [];
+  }
+
+  if (!Array.isArray(storedTaps)) return [];
+
+  return storedTaps
+    .map(parsePendingNotificationTap)
+    .filter((tap): tap is PendingNotificationTap => tap !== null);
+};
+
+export const storePendingNotificationTap = async (
+  tap: PendingNotificationTap
 ): Promise<void> => {
-  const storedTap = await getPendingNotificationTap();
-  if (!storedTap || storedTap.notificationId !== notificationId) return;
+  const storedTaps = await getPendingNotificationTaps();
+  const pendingTaps = [
+    tap,
+    ...storedTaps.filter(
+      (storedTap) => storedTap.notificationId !== tap.notificationId
+    ),
+  ].slice(0, MAX_PENDING_NOTIFICATION_TAPS);
+
+  await AsyncStorage.setItem(
+    PENDING_NOTIFICATION_TAP_KEY,
+    JSON.stringify(pendingTaps)
+  );
+};
+
+export const getPendingNotificationTap = async (
+  notificationId: string
+): Promise<PendingNotificationTap | null> => {
+  const storedTaps = await getPendingNotificationTaps();
+  return (
+    storedTaps.find((tap) => tap.notificationId === notificationId) ?? null
+  );
+};
+
+export const clearPendingNotificationTap = async (
+  notificationId: string
+): Promise<void> => {
+  const storedTaps = await getPendingNotificationTaps();
+  const remainingTaps = storedTaps.filter(
+    (tap) => tap.notificationId !== notificationId
+  );
+  if (remainingTaps.length === storedTaps.length) return;
+
+  if (remainingTaps.length > 0) {
+    await AsyncStorage.setItem(
+      PENDING_NOTIFICATION_TAP_KEY,
+      JSON.stringify(remainingTaps)
+    );
+    return;
+  }
 
   await AsyncStorage.removeItem(PENDING_NOTIFICATION_TAP_KEY);
 };

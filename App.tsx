@@ -34,7 +34,6 @@ import {
   getToken,
   onMessage,
   onNotificationOpenedApp,
-  getInitialNotification,
   AuthorizationStatus,
 } from "@react-native-firebase/messaging";
 import type { FirebaseMessagingTypes } from "@react-native-firebase/messaging";
@@ -421,6 +420,12 @@ const App: React.FC = () => {
     return true;
   };
 
+  const clearLastNotificationResponse = () => {
+    void Notifications.clearLastNotificationResponseAsync().catch((error) => {
+      console.warn("⚠️ Failed to clear the last notification response:", error);
+    });
+  };
+
   const flushPendingNotificationTap = () => {
     const pendingTap = pendingNotificationTapRef.current;
     if (!webBridgeReadyRef.current || !pendingTap) return;
@@ -441,28 +446,49 @@ const App: React.FC = () => {
       }
     );
 
-    void Notifications.clearLastNotificationResponseAsync().catch((error) => {
-      console.warn("⚠️ Failed to clear the last notification response:", error);
-    });
+    clearLastNotificationResponse();
   };
 
-  const queueNotificationTap = (tap: PendingNotificationTap | null) => {
-    if (!tap) {
-      console.warn("⚠️ Notification tap is missing a recipient address");
-      return;
-    }
-
+  const queueNotificationTap = (tap: PendingNotificationTap) => {
     if (
-      tap.notificationId &&
-      (tap.notificationId === lastDeliveredNotificationIdRef.current ||
-        tap.notificationId ===
-          pendingNotificationTapRef.current?.notificationId)
+      tap.notificationId === lastDeliveredNotificationIdRef.current ||
+      tap.notificationId === pendingNotificationTapRef.current?.notificationId
     ) {
       return;
     }
 
     pendingNotificationTapRef.current = tap;
     flushPendingNotificationTap();
+  };
+
+  const handleNotificationTap = (
+    notificationId: string,
+    data: Record<string, unknown> | undefined
+  ): void => {
+    const tap = createNotificationTap(notificationId, data);
+    if (tap) {
+      queueNotificationTap(tap);
+      return;
+    }
+
+    void getPendingNotificationTap(notificationId)
+      .then((storedTap) => {
+        if (storedTap) {
+          queueNotificationTap(storedTap);
+          return;
+        }
+
+        console.warn("⚠️ Notification tap data was not found", {
+          notificationId,
+        });
+        clearLastNotificationResponse();
+      })
+      .catch((error) => {
+        console.warn("⚠️ Failed to restore notification tap data", {
+          notificationId,
+          error,
+        });
+      });
   };
 
   /**
@@ -620,36 +646,20 @@ const App: React.FC = () => {
 
         console.log("👆 Notification tapped:", { data, tappedTime });
 
-        queueNotificationTap(
-          createNotificationTap(notification.request.identifier, data)
-        );
+        handleNotificationTap(notification.request.identifier, data);
       });
 
     void Notifications.getLastNotificationResponseAsync()
       .then((response) => {
         if (!response) return;
 
-        const { notification } = response;
-        queueNotificationTap(
-          createNotificationTap(
-            notification.request.identifier,
-            notification.request.content.data
-          )
+        handleNotificationTap(
+          response.notification.request.identifier,
+          response.notification.request.content.data
         );
       })
       .catch((error) => {
         console.warn("⚠️ Failed to get the last notification response:", error);
-      });
-
-    void getPendingNotificationTap()
-      .then((tap) => {
-        if (!tap) return;
-
-        console.log("📱 Restored pending notification tap data");
-        queueNotificationTap(tap);
-      })
-      .catch((error) => {
-        console.warn("⚠️ Failed to restore the pending notification tap:", error);
       });
 
     return () => {
@@ -757,36 +767,17 @@ const App: React.FC = () => {
             "📱 FCM message opened app from background:",
             remoteMessage
           );
-          queueNotificationTap(
-            createNotificationTap(
-              remoteMessage.messageId ?? null,
-              remoteMessage.data
-            )
+          if (!remoteMessage.messageId) {
+            console.warn("⚠️ Opened FCM notification has no message ID");
+            return;
+          }
+
+          handleNotificationTap(
+            remoteMessage.messageId,
+            remoteMessage.data
           );
         }
       );
-
-      // Handle messages when app is completely killed and opened by notification
-      void getInitialNotification(messagingInstance)
-        .then(
-          (remoteMessage: FirebaseMessagingTypes.RemoteMessage | null) => {
-            if (remoteMessage) {
-              console.log(
-                "📱 FCM message opened app from killed state:",
-                remoteMessage
-              );
-              queueNotificationTap(
-                createNotificationTap(
-                  remoteMessage.messageId ?? null,
-                  remoteMessage.data
-                )
-              );
-            }
-          }
-        )
-        .catch((error) => {
-          console.warn("⚠️ Failed to get the initial FCM notification:", error);
-        });
 
       // Cleanup listeners
       return () => {
