@@ -56,6 +56,12 @@ interface APP_PARAMS {
   fcmToken?: string;
 }
 
+interface PendingNotificationTap {
+  notificationId: string | null;
+  to: string;
+  from: string | null;
+}
+
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldPlaySound: true,
@@ -287,6 +293,9 @@ const App: React.FC = () => {
   const appState = useRef(AppState.currentState);
   const appResumeTimer = useRef<NodeJS.Timeout | null>(null);
   const webViewRef = useRef<WebView>(null);
+  const webBridgeReadyRef = useRef(false);
+  const pendingNotificationTapRef = useRef<PendingNotificationTap | null>(null);
+  const lastDeliveredNotificationIdRef = useRef<string | null>(null);
   const showNavBarRef = useRef(true); // Show navigation bar on app launch
   const [deviceToken, setDeviceToken] = useState<string | null>(null);
   const [expoPushToken, setExpoPushToken] = useState<string | null>(null);
@@ -401,14 +410,66 @@ const App: React.FC = () => {
     return () => sub.remove();
   }, []);
 
-  const sendMessageToWebView = (message: object) => {
+  const sendMessageToWebView = (message: object): boolean => {
     const messageJson = JSON.stringify(message);
-    if (webViewRef.current) {
-      const jsToInject = `window.dispatchEvent(new MessageEvent('message', { data: ${JSON.stringify(
-        messageJson
-      )} }));`;
-      webViewRef.current.injectJavaScript(jsToInject);
+    if (!webViewRef.current) return false;
+
+    const jsToInject = `window.dispatchEvent(new MessageEvent('message', { data: ${JSON.stringify(
+      messageJson
+    )} }));`;
+    webViewRef.current.injectJavaScript(jsToInject);
+    return true;
+  };
+
+  const flushPendingNotificationTap = () => {
+    const pendingTap = pendingNotificationTapRef.current;
+    if (!webBridgeReadyRef.current || !pendingTap) return;
+
+    const wasSent = sendMessageToWebView({
+      type: "NOTIFICATION_TAPPED",
+      to: pendingTap.to,
+      from: pendingTap.from,
+    });
+    if (!wasSent) return;
+
+    pendingNotificationTapRef.current = null;
+    lastDeliveredNotificationIdRef.current = pendingTap.notificationId;
+
+    void Notifications.clearLastNotificationResponseAsync().catch((error) => {
+      console.warn("⚠️ Failed to clear the last notification response:", error);
+    });
+  };
+
+  const queueNotificationTap = (
+    notificationId: string | null,
+    data: Record<string, unknown> | undefined
+  ) => {
+    if (!data) {
+      console.warn("⚠️ Notification tap is missing data");
+      return;
     }
+
+    const { to, from } = data;
+    if (typeof to !== "string" || to.length === 0) {
+      console.warn("⚠️ Notification tap is missing a recipient address");
+      return;
+    }
+
+    if (
+      notificationId &&
+      (notificationId === lastDeliveredNotificationIdRef.current ||
+        notificationId ===
+          pendingNotificationTapRef.current?.notificationId)
+    ) {
+      return;
+    }
+
+    pendingNotificationTapRef.current = {
+      notificationId,
+      to,
+      from: typeof from === "string" ? from : null,
+    };
+    flushPendingNotificationTap();
   };
 
   /**
@@ -560,28 +621,27 @@ const App: React.FC = () => {
     // Listen for notification response (when user taps notification)
     const notificationResponseListener =
       Notifications.addNotificationResponseReceivedListener((response) => {
-        const { notification, actionIdentifier } = response;
+        const { notification } = response;
         const { data } = notification.request.content;
         const tappedTime = new Date().toLocaleString();
 
         console.log("👆 Notification tapped:", { data, tappedTime });
 
-        // // Handle action button responses
-        // if (actionIdentifier === "CANCEL_CALL") {
-        //   console.log("❌ Cancel call button pressed");
-        //   // Clear the notification from the panel - no need to open app
-        //   Notifications.dismissNotificationAsync(
-        //     notification.request.identifier
-        //   );
-        // }
+        queueNotificationTap(notification.request.identifier, data);
+      });
 
-        setTimeout(() => {
-          sendMessageToWebView({
-            type: "NOTIFICATION_TAPPED",
-            to: data.to,
-            from: data.from,
-          });
-        }, 300);
+    void Notifications.getLastNotificationResponseAsync()
+      .then((response) => {
+        if (!response) return;
+
+        const { notification } = response;
+        queueNotificationTap(
+          notification.request.identifier,
+          notification.request.content.data
+        );
+      })
+      .catch((error) => {
+        console.warn("⚠️ Failed to get the last notification response:", error);
       });
 
     return () => {
@@ -689,6 +749,10 @@ const App: React.FC = () => {
             "📱 FCM message opened app from background:",
             remoteMessage
           );
+          queueNotificationTap(
+            remoteMessage.messageId ?? null,
+            remoteMessage.data
+          );
         }
       );
 
@@ -700,9 +764,15 @@ const App: React.FC = () => {
               "📱 FCM message opened app from killed state:",
               remoteMessage
             );
+            queueNotificationTap(
+              remoteMessage.messageId ?? null,
+              remoteMessage.data
+            );
           }
         }
-      );
+      ).catch((error) => {
+        console.warn("⚠️ Failed to get the initial FCM notification:", error);
+      });
 
       // Cleanup listeners
       return () => {
@@ -995,6 +1065,9 @@ const App: React.FC = () => {
   const handleWebViewMessage = async (event: any) => {
     try {
       const data = JSON.parse(event.nativeEvent.data);
+
+      webBridgeReadyRef.current = true;
+      flushPendingNotificationTap();
 
       // console.log("📡 Received message:", data);
 
@@ -1414,6 +1487,7 @@ const App: React.FC = () => {
               }}
               // Add load start handler
               onLoadStart={() => {
+                webBridgeReadyRef.current = false;
                 console.log("🔄 WebView load started");
               }}
               // WHITE SCREEN FIX ON IOS
