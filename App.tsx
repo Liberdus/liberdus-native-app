@@ -409,15 +409,14 @@ const App: React.FC = () => {
     return () => sub.remove();
   }, []);
 
-  const sendMessageToWebView = (message: object): boolean => {
+  const sendMessageToWebView = (message: object) => {
     const messageJson = JSON.stringify(message);
-    if (!webViewRef.current) return false;
-
-    const jsToInject = `window.dispatchEvent(new MessageEvent('message', { data: ${JSON.stringify(
-      messageJson
-    )} }));`;
-    webViewRef.current.injectJavaScript(jsToInject);
-    return true;
+    if (webViewRef.current) {
+      const jsToInject = `window.dispatchEvent(new MessageEvent('message', { data: ${JSON.stringify(
+        messageJson
+      )} }));`;
+      webViewRef.current.injectJavaScript(jsToInject);
+    }
   };
 
   const clearLastNotificationResponse = () => {
@@ -428,13 +427,12 @@ const App: React.FC = () => {
 
   const flushPendingNotificationTap = () => {
     const pendingTap = pendingNotificationTapRef.current;
-    if (!webBridgeReadyRef.current || !pendingTap) return;
+    if (!webBridgeReadyRef.current || !webViewRef.current || !pendingTap) return;
 
-    const wasSent = sendMessageToWebView({
+    sendMessageToWebView({
       type: "NOTIFICATION_TAPPED",
       to: pendingTap.to,
     });
-    if (!wasSent) return;
 
     pendingNotificationTapRef.current = null;
     lastDeliveredNotificationIdRef.current = pendingTap.notificationId;
@@ -461,34 +459,20 @@ const App: React.FC = () => {
     flushPendingNotificationTap();
   };
 
-  const handleNotificationTap = (
+  const handleNotificationTap = async (
     notificationId: string,
     data: Record<string, unknown> | undefined
-  ): void => {
-    const tap = createNotificationTap(notificationId, data);
-    if (tap) {
-      queueNotificationTap(tap);
-      return;
+  ): Promise<void> => {
+    try {
+      const tap =
+        createNotificationTap(notificationId, data) ??
+        (await getPendingNotificationTap(notificationId));
+
+      if (tap) queueNotificationTap(tap);
+      else clearLastNotificationResponse();
+    } catch (error) {
+      console.warn("⚠️ Failed to handle notification tap", error);
     }
-
-    void getPendingNotificationTap(notificationId)
-      .then((storedTap) => {
-        if (storedTap) {
-          queueNotificationTap(storedTap);
-          return;
-        }
-
-        console.warn("⚠️ Notification tap data was not found", {
-          notificationId,
-        });
-        clearLastNotificationResponse();
-      })
-      .catch((error) => {
-        console.warn("⚠️ Failed to restore notification tap data", {
-          notificationId,
-          error,
-        });
-      });
   };
 
   /**
@@ -646,14 +630,14 @@ const App: React.FC = () => {
 
         console.log("👆 Notification tapped:", { data, tappedTime });
 
-        handleNotificationTap(notification.request.identifier, data);
+        void handleNotificationTap(notification.request.identifier, data);
       });
 
     void Notifications.getLastNotificationResponseAsync()
       .then((response) => {
         if (!response) return;
 
-        handleNotificationTap(
+        void handleNotificationTap(
           response.notification.request.identifier,
           response.notification.request.content.data
         );
@@ -772,7 +756,7 @@ const App: React.FC = () => {
             return;
           }
 
-          handleNotificationTap(
+          void handleNotificationTap(
             remoteMessage.messageId,
             remoteMessage.data
           );
