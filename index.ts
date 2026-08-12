@@ -76,8 +76,13 @@ if (Platform.OS == "android") {
         const isCallMessage = remoteMessage.data?.type === "incoming_call";
 
         if (!isCallMessage) {
+          if (!remoteMessage.messageId) {
+            console.warn("⚠️ Background notification has no message ID");
+            return;
+          }
+
           const notificationTap = createNotificationTap(
-            remoteMessage.messageId ?? null,
+            remoteMessage.messageId,
             remoteMessage.data
           );
           if (!notificationTap) {
