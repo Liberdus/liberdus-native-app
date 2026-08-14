@@ -17,12 +17,13 @@ import * as Linking from "expo-linking";
 import { WebView } from "react-native-webview";
 import * as Notifications from "expo-notifications";
 import * as WebBrowser from "expo-web-browser";
-import * as NavigationBar from "expo-navigation-bar";
+import { NavigationBar } from "expo-navigation-bar";
 import * as Device from "expo-device";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Crypto from "expo-crypto";
 import Constants from "expo-constants";
-import * as FileSystem from "expo-file-system";
+// SDK 56: documentDirectory / writeAsStringAsync / StorageAccessFramework use the legacy export.
+import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
 import FileViewer from "react-native-file-viewer";
 import AnimatedSplash from "./SplashScreen";
@@ -30,13 +31,12 @@ import CallKeepService from "./CallKeepService";
 import { CallData, isStaleCallNotification } from "./CallKeepOptions";
 import {
   getMessaging,
-  requestPermission,
   getToken,
   onMessage,
   onNotificationOpenedApp,
-  AuthorizationStatus,
 } from "@react-native-firebase/messaging";
-import type { FirebaseMessagingTypes } from "@react-native-firebase/messaging";
+// Firebase v26: FirebaseMessagingTypes namespace removed; use RemoteMessage directly.
+import type { RemoteMessage } from "@react-native-firebase/messaging";
 import VoipPushNotification from "react-native-voip-push-notification";
 import {
   clearPendingNotificationTap,
@@ -290,7 +290,7 @@ const isViewableFile = (filename: string, mimeType: string): boolean => {
 
 const App: React.FC = () => {
   const appState = useRef(AppState.currentState);
-  const appResumeTimer = useRef<NodeJS.Timeout | null>(null);
+  const appResumeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const webViewRef = useRef<WebView>(null);
   const webBridgeReadyRef = useRef(false);
   const pendingNotificationTapRef = useRef<PendingNotificationTap | null>(null);
@@ -573,13 +573,14 @@ const App: React.FC = () => {
       if (Platform.OS === "ios") {
         return;
       }
+      // SDK 56 removed setBehaviorAsync/setPositionAsync. Equivalent behavior:
+      // - overlay-swipe: setHidden() sets BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE (NavigationBarModule.kt)
+      // - absolute position: edge-to-edge is enabled at app startup (setDecorFitsSystemWindows(false))
       if (visible) {
-        await NavigationBar.setVisibilityAsync("visible");
+        NavigationBar.setHidden(false);
       } else {
-        await NavigationBar.setVisibilityAsync("hidden");
+        NavigationBar.setHidden(true);
       }
-      await NavigationBar.setBehaviorAsync("overlay-swipe");
-      await NavigationBar.setPositionAsync("absolute");
     } catch (error) {
       console.warn("⚠️ Failed to hide navigation bar:", error);
     }
@@ -672,24 +673,33 @@ const App: React.FC = () => {
     if (Platform.OS === "android") {
       console.log("🔥 Setting up Firebase messaging for Android");
 
-      // Request permission for Android notifications
+      // Request permission for Android notifications via expo-notifications
+      // (Firebase requestPermission/AuthorizationStatus are deprecated in v26)
       const requestFirebasePermission = async () => {
-        const messagingInstance = getMessaging();
-        const authStatus = await requestPermission(messagingInstance);
-        const enabled =
-          authStatus === AuthorizationStatus.AUTHORIZED ||
-          authStatus === AuthorizationStatus.PROVISIONAL;
+        const { status: existingStatus } =
+          await Notifications.getPermissionsAsync();
+        let finalStatus = existingStatus;
 
-        if (enabled) {
-          console.log("📱 Firebase messaging permission granted:", authStatus);
-          // Get FCM token
-          try {
-            const fcmToken = await getToken(messagingInstance);
-            console.log("🔑 FCM Token:", fcmToken);
-            setFcmToken(fcmToken);
-          } catch (error) {
-            console.error("❌ Error getting FCM token:", error);
-          }
+        if (existingStatus !== "granted") {
+          const { status } = await Notifications.requestPermissionsAsync();
+          finalStatus = status;
+        }
+
+        if (finalStatus !== "granted") {
+          console.log("📱 Firebase messaging permission not granted");
+          return;
+        }
+
+        console.log("📱 Firebase messaging permission granted");
+
+        // Get FCM token
+        const messagingInstance = getMessaging();
+        try {
+          const fcmToken = await getToken(messagingInstance);
+          console.log("🔑 FCM Token:", fcmToken);
+          setFcmToken(fcmToken);
+        } catch (error) {
+          console.error("❌ Error getting FCM token:", error);
         }
       };
 
@@ -699,7 +709,7 @@ const App: React.FC = () => {
       const messagingInstance = getMessaging();
       const firebaseOnMessageListener = onMessage(
         messagingInstance,
-        async (remoteMessage: FirebaseMessagingTypes.RemoteMessage) => {
+        async (remoteMessage: RemoteMessage) => {
           console.log("📱 FCM message received in foreground:", remoteMessage);
 
           // Check if this is a call message
@@ -746,7 +756,7 @@ const App: React.FC = () => {
       // Handle background messages (when app is backgrounded but not killed)
       const firebaseOnNotificationOpenedAppListener = onNotificationOpenedApp(
         messagingInstance,
-        (remoteMessage: FirebaseMessagingTypes.RemoteMessage) => {
+        (remoteMessage: RemoteMessage) => {
           console.log(
             "📱 FCM message opened app from background:",
             remoteMessage
