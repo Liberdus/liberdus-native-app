@@ -5,7 +5,8 @@ import {
   getMessaging,
   setBackgroundMessageHandler,
 } from "@react-native-firebase/messaging";
-import type { FirebaseMessagingTypes } from "@react-native-firebase/messaging";
+// Firebase v26: FirebaseMessagingTypes namespace removed; use RemoteMessage directly.
+import type { RemoteMessage } from "@react-native-firebase/messaging";
 import App from "./App";
 import {
   CallData,
@@ -65,7 +66,7 @@ if (Platform.OS == "android") {
     const messagingInstance = getMessaging();
     setBackgroundMessageHandler(
       messagingInstance,
-      async (remoteMessage: FirebaseMessagingTypes.RemoteMessage) => {
+      async (remoteMessage: RemoteMessage) => {
         console.log("📱 FCM background message received:", remoteMessage);
 
         // Handle high priority data messages for calls
