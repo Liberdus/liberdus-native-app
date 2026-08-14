@@ -18,9 +18,9 @@
     "@config-plugins/react-native-callkeep": "^14.0.1",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-community/netinfo": "12.0.1",
-    "@react-native-firebase/app": "^23.1.2",
-    "@react-native-firebase/messaging": "^23.1.2",
-    "axios": "^1.10.0",
+    "@react-native-firebase/app": "^26.2.0",
+    "@react-native-firebase/messaging": "^26.2.0",
+    "axios": "^1.19.0",
     "expo": "~56.0.0",
     "expo-audio": "~56.0.13",
     "expo-build-properties": "~56.0.25",
@@ -42,11 +42,15 @@
     "react-native-uuid": "^2.0.3",
     "react-native-voip-push-notification": "^3.3.3",
     "react-native-webview": "13.16.1",
-    "uuid": "^11.1.0"
+    "uuid": "^11.1.1"
+  },
+  "overrides": {
+    "uuid": "^11.1.1",
+    "fast-xml-parser": "^5.7.0"
   },
   "devDependencies": {
     "@babel/core": "^7.29.0",
-    "@react-native-community/cli": "^19.1.0",
+    "@react-native-community/cli": "^20.2.0",
     "@types/react": "~19.2.10",
     "patch-package": "^8.0.0",
     "typescript": "~6.0.3"
