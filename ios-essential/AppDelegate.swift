@@ -1,10 +1,13 @@
-import Expo
+// Copied into ios/Liberdus/ after `npx expo prebuild --clean`.
+// SDK 56 / Swift 6: `internal import Expo`, `@main` (not @UIApplicationMain),
+// and no `bindReactNativeFactory` — see Expo 56 AppDelegate template.
+internal import Expo
 import React
 import ReactAppDependencyProvider
 import PushKit
 
-@UIApplicationMain
-public class AppDelegate: ExpoAppDelegate, PKPushRegistryDelegate {
+@main
+class AppDelegate: ExpoAppDelegate, PKPushRegistryDelegate {
   var window: UIWindow?
 
   var reactNativeDelegate: ExpoReactNativeFactoryDelegate?
@@ -21,7 +24,6 @@ public class AppDelegate: ExpoAppDelegate, PKPushRegistryDelegate {
 
     reactNativeDelegate = delegate
     reactNativeFactory = factory
-    bindReactNativeFactory(factory)
 
 #if os(iOS) || os(tvOS)
     window = UIWindow(frame: UIScreen.main.bounds)
@@ -65,7 +67,7 @@ public class AppDelegate: ExpoAppDelegate, PKPushRegistryDelegate {
   // MARK: - PKPushRegistryDelegate (Required by react-native-voip-push-notification)
   
   // Handle updated push credentials
-  public func pushRegistry(_ registry: PKPushRegistry, didUpdate pushCredentials: PKPushCredentials, for type: PKPushType) {
+  func pushRegistry(_ registry: PKPushRegistry, didUpdate pushCredentials: PKPushCredentials, for type: PKPushType) {
     NSLog("[AppDelegate] ✅ VoIP push credentials updated for type: \(type.rawValue)")
     let tokenString = pushCredentials.token.map { String(format: "%02hhx", $0) }.joined()
     NSLog("[AppDelegate] VoIP token: \(tokenString)")
@@ -73,7 +75,7 @@ public class AppDelegate: ExpoAppDelegate, PKPushRegistryDelegate {
     RNVoipPushNotificationManager.didUpdate(pushCredentials, forType: type.rawValue)
   }
   
-  public func pushRegistry(_ registry: PKPushRegistry, didInvalidatePushTokenFor type: PKPushType) {
+  func pushRegistry(_ registry: PKPushRegistry, didInvalidatePushTokenFor type: PKPushType) {
     NSLog("[AppDelegate] ⚠️ VoIP push token invalidated for type: \(type.rawValue)")
     // The system calls this method when a previously provided push token is no longer valid for use.
     // No action is necessary on your part to reregister the push type.
@@ -115,7 +117,7 @@ public class AppDelegate: ExpoAppDelegate, PKPushRegistryDelegate {
   }
 
   // Handle incoming pushes
-  public func pushRegistry(_ registry: PKPushRegistry, didReceiveIncomingPushWith payload: PKPushPayload, for type: PKPushType, completion: @escaping () -> Void) {
+  func pushRegistry(_ registry: PKPushRegistry, didReceiveIncomingPushWith payload: PKPushPayload, for type: PKPushType, completion: @escaping () -> Void) {
     NSLog("[AppDelegate] VoIP push received when app state: \(UIApplication.shared.applicationState.rawValue)")
     NSLog("[AppDelegate] VoIP payload: \(payload.dictionaryPayload)")
 
