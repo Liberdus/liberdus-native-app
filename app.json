@@ -73,6 +73,17 @@
     },
     "plugins": [
       [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#FFFFFF",
+          "android": {
+            "drawable": {
+              "icon": "./assets/blank-splash.xml"
+            }
+          }
+        }
+      ],
+      [
         "expo-audio",
         {
           "microphonePermission": "To send end to end encrypted voice messages."
