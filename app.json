@@ -8,11 +8,6 @@
     "jsEngine": "hermes",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "splash": {
-      "image": "./assets/logo.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#f5f7fa"
-    },
     "assetBundlePatterns": ["**/*"],
     "ios": {
       "buildNumber": "6",
@@ -77,6 +72,17 @@
       "enabled": false
     },
     "plugins": [
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#FFFFFF",
+          "android": {
+            "drawable": {
+              "icon": "./assets/blank-splash.xml"
+            }
+          }
+        }
+      ],
       [
         "expo-audio",
         {

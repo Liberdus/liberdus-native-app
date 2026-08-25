@@ -41,7 +41,7 @@ const AnimatedSplash = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f5f7fa",
+    backgroundColor: "#fff",
     justifyContent: "center",
     alignItems: "center",
   },
