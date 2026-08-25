@@ -8,6 +8,11 @@
     "jsEngine": "hermes",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/logo.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#f5f7fa"
+    },
     "assetBundlePatterns": ["**/*"],
     "ios": {
       "buildNumber": "6",
