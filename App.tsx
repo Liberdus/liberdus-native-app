@@ -26,7 +26,6 @@ import Constants from "expo-constants";
 import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
 import FileViewer from "react-native-file-viewer";
-import AnimatedSplash from "./SplashScreen";
 import CallKeepService from "./CallKeepService";
 import { CallData, isStaleCallNotification } from "./CallKeepOptions";
 import {
@@ -1331,7 +1330,7 @@ const App: React.FC = () => {
 
   if (!hasLaunchedOnce) {
     console.log("🚀 Launching app for the first time");
-    return <AnimatedSplash />;
+    return <View style={styles.container} />;
   }
 
   if (showWebView) {
