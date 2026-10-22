@@ -1,27 +1,23 @@
 import config from './app.json';
 import { AndroidConfig, withAndroidStyles, withPodfile } from '@expo/config-plugins';
 
-class AndroidLaunchScreen {
-  static configure(config) {
-    return withAndroidStyles(config, AndroidLaunchScreen.setWhiteBackground);
-  }
-
-  static setWhiteBackground(config) {
+function withWhiteAndroidLaunchScreen(config) {
+  return withAndroidStyles(config, (androidConfig) => {
     // The native launch window appears before the React Native loading screen.
     for (const [name, value] of Object.entries({
       'android:windowBackground': '@android:color/white',
       'android:windowSplashScreenBackground': '@android:color/white',
       'android:windowSplashScreenAnimatedIcon': '@android:color/transparent',
     })) {
-      config.modResults = AndroidConfig.Styles.assignStylesValue(config.modResults, {
+      androidConfig.modResults = AndroidConfig.Styles.assignStylesValue(androidConfig.modResults, {
         add: true,
         name,
         value,
         parent: { name: 'Theme.App.SplashScreen' },
       });
     }
-    return config;
-  }
+    return androidConfig;
+  });
 }
 
 /** RN Firebase 26+ uses SPM by default, which breaks iOS static frameworks. */
@@ -42,7 +38,7 @@ export default ({ config: _ }) => {
   const plugins = [
     ...config.expo.plugins,
     withFirebaseDisableSPM,
-    AndroidLaunchScreen.configure,
+    withWhiteAndroidLaunchScreen,
   ];
 
   // Only add Firebase plugins for Android builds
