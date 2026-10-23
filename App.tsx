@@ -26,7 +26,6 @@ import Constants from "expo-constants";
 import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
 import FileViewer from "react-native-file-viewer";
-import AnimatedSplash from "./SplashScreen";
 import CallKeepService from "./CallKeepService";
 import { CallData, isStaleCallNotification } from "./CallKeepOptions";
 import {
@@ -1331,7 +1330,7 @@ const App: React.FC = () => {
 
   if (!hasLaunchedOnce) {
     console.log("🚀 Launching app for the first time");
-    return <AnimatedSplash />;
+    return <View style={styles.container} />;
   }
 
   if (showWebView) {
@@ -1390,8 +1389,8 @@ const App: React.FC = () => {
               mixedContentMode="compatibility"
               // Allow universal access from file URLs
               allowUniversalAccessFromFileURLs={true}
-              // Start in loading state
-              startInLoadingState={true}
+              // Let the web client display its own loading animation.
+              renderLoading={() => <></>}
               // Allow file access
               allowFileAccess={true}
               // Add caching policy to prevent white screens
