@@ -1389,8 +1389,8 @@ const App: React.FC = () => {
               mixedContentMode="compatibility"
               // Allow universal access from file URLs
               allowUniversalAccessFromFileURLs={true}
-              // Start in loading state
-              startInLoadingState={true}
+              // Let the web client display its own loading animation.
+              renderLoading={() => <></>}
               // Allow file access
               allowFileAccess={true}
               // Add caching policy to prevent white screens
